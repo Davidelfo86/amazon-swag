@@ -24,50 +24,27 @@ if scelta == "Registrazione":
         if submit:
             if nome and cognome:
                 try:
-                    df_anagrafica = conn.read(worksheet="Anagrafica", ttl=0)
-                    
-                    # 1. Pulizia righe vuote
-                    df_anagrafica = df_anagrafica.dropna(how="all")
-                    df_anagrafica = df_anagrafica.fillna("")
-                    
-                    # 2. SCACCIA-FANTASMI: Manteniamo solo le colonne che ci interessano davvero
-                    colonne_utili = ["Nome", "Cognome", "Email", "Punti_Totali"]
-                    df_anagrafica = df_anagrafica[[c for c in colonne_utili if c in df_anagrafica.columns]]
-                    
-                    # 3. Creiamo la nuova riga
+                    df_anagrafica = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
                     nuovo_utente = pd.DataFrame([{
-                        "Nome": nome, 
-                        "Cognome": cognome, 
-                        "Email": email if email else "", 
-                        "Punti_Totali": 0
+                        "Nome": nome, "Cognome": cognome, 
+                        "Email": email if email else "", "Punti_Totali": 0
                     }])
-                    
-                    # 4. Uniamo e carichiamo
                     updated_df = pd.concat([df_anagrafica, nuovo_utente], ignore_index=True)
                     conn.update(worksheet="Anagrafica", data=updated_df)
-                    
-                    st.success(f"Benvenuto {nome}! Registrazione completata con successo.")
+                    st.success(f"Benvenuto {nome}! Registrazione completata.")
                     st.balloons()
                 except Exception as e:
-                    st.error(f"ERRORE TECNICO: {e}")
+                    st.error(f"ERRORE: {e}")
             else:
-                st.warning("Nome e Cognome sono obbligatori!")
+                st.warning("Nome e Cognome obbligatori!")
 
 # --- SEZIONE 2: I MIEI PUNTI ---
 elif scelta == "I miei Punti":
     st.header("💰 Il tuo Saldo Punti")
     
     try:
-        df_totali = conn.read(worksheet="Anagrafica", ttl=0)
-        df_log = conn.read(worksheet="Log_Punti", ttl=0)
-
-        df_totali = df_totali.dropna(how="all")
-        df_log = df_log.dropna(how="all")
-
-        # Rimuoviamo eventuali colonne fantasma anche in lettura
-        df_totali = df_totali.loc[:, ~df_totali.columns.astype(str).str.contains('^Unnamed')]
-        df_log = df_log.loc[:, ~df_log.columns.astype(str).str.contains('^Unnamed')]
-
+        df_totali = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
+        
         if not df_totali.empty:
             lista_nomi = (df_totali['Nome'].astype(str) + " " + df_totali['Cognome'].astype(str)).tolist()
             utente_sel = st.selectbox("Seleziona il tuo nome:", lista_nomi)
@@ -75,28 +52,37 @@ elif scelta == "I miei Punti":
             if utente_sel:
                 n_sel, c_sel = utente_sel.split(" ", 1)
                 
-                punti_row = df_totali.loc[(df_totali['Nome'] == n_sel) & (df_totali['Cognome'] == c_sel)]
-                if not punti_row.empty:
-                    punti_tot = punti_row['Punti_Totali'].values[0]
-                    # Rimuoviamo i decimali (es. 0.0) se presenti
-                    punti_tot = int(punti_tot) if pd.notnull(punti_tot) and str(punti_tot).replace('.','',1).isdigit() else punti_tot
+                # Leggiamo il registro attività
+                try:
+                    df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all")
                     
-                    st.metric("Saldo Attuale", f"{punti_tot} SWAG Points")
-                
-                st.markdown("### 📋 Cronologia Attività")
-                storico_utente = df_log[(df_log['Nome'] == n_sel) & (df_log['Cognome'] == c_sel)]
-                
-                if not storico_utente.empty:
-                    st.dataframe(storico_utente[["Data", "Punti_Assegnati", "Attività"]], use_container_width=True, hide_index=True)
-                else:
-                    st.info("Nessuna attività registrata ancora. Continua così!")
+                    # FILTRO: prendiamo solo le righe di questo utente
+                    storico_utente = df_log[(df_log['Nome'] == n_sel) & (df_log['Cognome'] == c_sel)]
+                    
+                    # CALCOLO MAGICO: Sommiamo i punti della colonna Punti_Assegnati
+                    if not storico_utente.empty:
+                        # Convertiamo in numeri per sicurezza
+                        punti_numerici = pd.to_numeric(storico_utente['Punti_Assegnati'], errors='coerce').fillna(0)
+                        totale_reale = int(punti_numerici.sum())
+                    else:
+                        totale_reale = 0
+                    
+                    # Mostriamo il totale calcolato
+                    st.metric("Saldo Attuale", f"{totale_reale} SWAG Points")
+                    
+                    st.markdown("### 📋 Cronologia Attività")
+                    if not storico_utente.empty:
+                        st.dataframe(storico_utente[["Data", "Punti_Assegnati", "Attività"]], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Nessuna attività registrata ancora.")
+                except Exception as e:
+                    st.metric("Saldo Attuale", "0 SWAG Points")
+                    st.info("Inizia a guadagnare i tuoi primi punti!")
         else:
             st.info("Nessun utente registrato.")
     except Exception as e:
-        st.error(f"ERRORE TECNICO LETTURA: {e}")
+        st.error(f"ERRORE LETTURA: {e}")
 
-# --- SEZIONE 3: REGOLAMENTO ---
 elif scelta == "Regolamento":
-    st.header("📜 Come guadagnare punti")
-    st.write("Segui queste attività per accumulare punti SWAG:")
-    st.info("Qui potrai elencare le tue 10 attività specifiche.")
+    st.header("📜 Regolamento")
+    st.write("Le attività verranno caricate a breve.")
