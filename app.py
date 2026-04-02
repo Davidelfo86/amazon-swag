@@ -2,69 +2,78 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# 1. Configurazione della pagina (Titolo che appare sulla scheda del browser)
-st.set_page_config(page_title="Amazon SWAG App", page_icon="📦", layout="centered")
+# 1. Configurazione Pagina
+st.set_page_config(page_title="Amazon SWAG", page_icon="📦", layout="centered")
 
-# Stile grafico minimo per renderlo più "Amazon"
 st.title("📦 Amazon SWAG Program")
 st.markdown("---")
-st.write("Benvenuto! Registrati qui sotto per iniziare ad accumulare punti SWAG.")
 
-# 2. Collegamento al tuo foglio Google
-# Ho inserito il link che mi hai fornito
+# 2. Collegamento al tuo Google Sheet
 url = "https://docs.google.com/spreadsheets/d/1zcW2RmucH-zrPNphehPjYmohf8cj-_-TQST2iwvNmfU/edit?usp=sharing"
-
-# Creiamo la connessione
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Leggiamo i dati attuali (per poterli aggiornare dopo)
-df = conn.read(spreadsheet=url)
+# 3. Menu di navigazione
+scelta = st.sidebar.radio("Vai a:", ["Iscrizione", "I miei Punti", "Regolamento"])
 
-# --- SEZIONE 1: MODULO DI REGISTRAZIONE ---
-with st.expander("➕ CLICCA QUI PER ISCRIVERTI AL PROGRAMMA"):
+# --- SEZIONE ISCRIZIONE ---
+if scelta == "Iscrizione":
+    st.header("📝 Registrati al programma")
     with st.form("form_registro", clear_on_submit=True):
-        nome = st.text_input("Il tuo Nome")
-        cognome = st.text_input("Il tuo Cognome")
-        email = st.text_input("La tua Email (opzionale)")
-        
-        submit = st.form_submit_button("Invia Iscrizione")
+        nome = st.text_input("Nome")
+        cognome = st.text_input("Cognome")
+        email = st.text_input("Email (opzionale)")
+        submit = st.form_submit_button("Invia Registrazione")
         
         if submit:
             if nome and cognome:
-                # Creiamo la nuova riga con i dati inseriti
-                # Nota: assegniamo 0 punti di default ai nuovi iscritti
-                nuovo_utente = pd.DataFrame([{"Nome": nome, "Cognome": cognome, "Email": email, "Punti": 0}])
+                # Legge i dati attuali dal foglio Anagrafica
+                df_anagrafica = conn.read(spreadsheet=url, worksheet="Anagrafica")
+                # Crea la nuova riga
+                nuovo_utente = pd.DataFrame([{"Nome": nome, "Cognome": cognome, "Email": email, "Punti_Totali": 0}])
+                # Aggiorna il foglio Anagrafica
+                updated_df = pd.concat([df_anagrafica, nuovo_utente], ignore_index=True)
+                conn.update(spreadsheet=url, data=updated_df, worksheet="Anagrafica")
                 
-                # Uniamo i vecchi dati con il nuovo utente
-                updated_df = pd.concat([df, nuovo_utente], ignore_index=True)
-                
-                # Aggiorniamo il foglio Google
-                conn.update(spreadsheet=url, data=updated_df)
-                
-                st.success(f"Ottimo {nome}! Ti sei registrato correttamente. Vedrai il tuo nome nella lista tra pochi istanti.")
+                st.success(f"Benvenuto {nome}! Ti sei registrato correttamente.")
                 st.balloons()
             else:
-                st.error("Per favore, inserisci almeno Nome e Cognome per procedere.")
+                st.error("Inserisci Nome e Cognome!")
 
-# --- SEZIONE 2: VISUALIZZAZIONE PUNTI ---
-st.markdown("---")
-st.subheader("💰 La tua situazione Punti")
+# --- SEZIONE I MIEI PUNTI ---
+elif scelta == "I miei Punti":
+    st.header("💰 Controlla il tuo Saldo e Storico")
+    
+    # Carichiamo i dati dai due fogli
+    df_totali = conn.read(spreadsheet=url, worksheet="Anagrafica")
+    df_log = conn.read(spreadsheet=url, worksheet="Log_Punti")
+    
+    if not df_totali.empty:
+        # Creiamo una lista di nomi per la ricerca
+        lista_nomi = (df_totali['Nome'] + " " + df_totali['Cognome']).tolist()
+        utente_sel = st.selectbox("Seleziona il tuo nome e cognome:", lista_nomi)
+        
+        if utente_sel:
+            # Separiamo nome e cognome dalla selezione
+            n_sel, c_sel = utente_sel.split(" ", 1)
+            
+            # Recupero Punti Totali dal foglio Anagrafica
+            punti_tot = df_totali.loc[(df_totali['Nome'] == n_sel) & (df_totali['Cognome'] == c_sel), 'Punti_Totali'].values[0]
+            st.metric(label="Saldo Attuale SWAG", value=f"{punti_tot} pts")
+            
+            st.markdown("### 📋 Dettaglio Attività")
+            # Recupero lo storico dal foglio Log_Punti
+            storico = df_log[(df_log['Nome'] == n_sel) & (df_log['Log_Punti' == c_sel] if 'Cognome' in df_log else df_log['Nome'] == n_sel)]
+            # Nota: Filtriamo il log per nome e cognome
+            storico_utente = df_log[(df_log['Nome'] == n_sel) & (df_log['Cognome'] == c_sel)]
+            
+            if not storico_utente.empty:
+                st.dataframe(storico_utente[["Data", "Punti_Assegnati", "Attività"]], use_container_width=True, hide_index=True)
+            else:
+                st.info("Non ci sono ancora attività registrate a tuo nome.")
+    else:
+        st.warning("Nessun utente registrato nel sistema.")
 
-# Rileggiamo i dati aggiornati per mostrarli nella tabella
-data_display = conn.read(spreadsheet=url)
-
-# Mostriamo solo le colonne che servono ai dipendenti (Nome, Cognome e Punti)
-if not data_display.empty:
-    st.dataframe(data_display[["Nome", "Cognome", "Punti"]], use_container_width=True, hide_index=True)
-else:
-    st.info("Al momento non ci sono iscritti. Sii il primo!")
-
-# --- SEZIONE 3: LE 10 REGOLE (Promemoria) ---
-st.sidebar.header("🎯 Come guadagnare")
-st.sidebar.info("""
-Ecco alcune attività:
-1. Zero errori nel turno
-2. Straordinario programmato
-3. Segnalazione sicurezza
-4. (Aggiungi qui le altre tue 7 attività...)
-""")
+# --- SEZIONE REGOLAMENTO ---
+elif scelta == "Regolamento":
+    st.header("🎯 Come guadagnare punti")
+    st.info("Qui compariranno le tue 10 attività una volta che le avremo inserite.")
