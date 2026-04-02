@@ -2,130 +2,171 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-st.set_page_config(page_title="Amazon SWAG", page_icon="📦", layout="centered")
+# 1. Configurazione Pagina (Nascondiamo la barra laterale di default)
+st.set_page_config(
+    page_title="Amazon SWAG 2026", 
+    page_icon="📦", 
+    layout="centered", 
+    initial_sidebar_state="collapsed"
+)
 
-st.title("📦 Amazon SWAG Program")
-st.write("Gestione punti e iscrizioni dipendenti")
-st.markdown("---")
+# 2. CSS personalizzato per nascondere menu, gattino GitHub e applicare stile Amazon
+st.markdown("""
+    <style>
+    /* Nasconde il menu in alto a destra e il tasto deploy (gattino) */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stAppDeployButton {display:none;}
+    
+    # /* Nasconde completamente la sidebar */
+    [data-testid="stSidebar"] {display: none;}
+    [data-testid="stSidebarNav"] {display: none;}
+    
+    /* Stile Bottoni e Colori Amazon */
+    .stButton>button {
+        background-color: #FF9900;
+        color: #232F3E;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        background-color: #e68a00;
+        color: white;
+    }
+    .main {
+        background-color: #f3f3f3;
+    }
+    div[data-testid="stMetricValue"] {
+        color: #FF9900;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-scelta = st.sidebar.radio("Scegli operazione:", ["Registrazione", "I miei Punti", "Regolamento"])
+# --- LOGICA DI NAVIGAZIONE ---
+if 'user_auth' not in st.session_state:
+    st.session_state.user_auth = None
 
-# --- SEZIONE 1: REGISTRAZIONE ---
-if scelta == "Registrazione":
-    st.header("📝 Modulo d'Iscrizione")
-    with st.form("form_iscrizione", clear_on_submit=True):
-        nome = st.text_input("Il tuo Nome")
-        cognome = st.text_input("Il tuo Cognome")
-        email = st.text_input("Email (facoltativa)")
-        submit = st.form_submit_button("Invia Iscrizione")
-        
-        if submit:
-            if nome and cognome:
-                try:
-                    df_anagrafica = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                    # Manteniamo solo le colonne necessarie
-                    cols = ["Nome", "Cognome", "Email", "Punti_Totali"]
-                    df_anagrafica = df_anagrafica[[c for c in cols if c in df_anagrafica.columns]]
-                    
-                    nuovo_utente = pd.DataFrame([{
-                        "Nome": nome, "Cognome": cognome, 
-                        "Email": email if email else "", "Punti_Totali": 0
-                    }])
-                    updated_df = pd.concat([df_anagrafica, nuovo_utente], ignore_index=True)
-                    conn.update(worksheet="Anagrafica", data=updated_df)
-                    st.success(f"Benvenuto {nome}! Registrazione completata.")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"ERRORE: {e}")
-            else:
-                st.warning("Nome e Cognome obbligatori!")
-
-# --- SEZIONE 2: I MIEI PUNTI ---
-elif scelta == "I miei Punti":
-    st.header("💰 Il tuo Saldo Punti")
+# --- PAGINA 1: INTRO E REGISTRAZIONE ---
+if st.session_state.user_auth is None:
+    # Header stile Amazon
+    st.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", width=150)
+    st.title("📦 SWAG Program 2026")
     
-    try:
-        df_totali = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
-        # Rimuoviamo eventuali colonne fantasma in lettura
-        df_totali = df_totali.loc[:, ~df_totali.columns.astype(str).str.contains('^Unnamed')]
-        
-        if not df_totali.empty:
-            lista_nomi = (df_totali['Nome'].astype(str) + " " + df_totali['Cognome'].astype(str)).tolist()
-            utente_sel = st.selectbox("Seleziona il tuo nome:", lista_nomi)
+    st.markdown("""
+    ### Benvenuto nel futuro dell'eccellenza!
+    Il programma **SWAG (Success Worth Achieving Goals)** è l'iniziativa esclusiva dedicata a chi fa la differenza ogni giorno. 
+    Accumula punti partecipando attivamente alla vita della Delivery Station e riscattali con fantastici premi.
+    
+    *Sicurezza, Qualità e Impegno: i tuoi pilastri, i tuoi premi.*
+    """)
+    
+    tab1, tab2 = st.tabs(["Iscriviti ora", "Accedi al tuo profilo"])
+    
+    with tab1:
+        with st.form("iscrizione_form"):
+            st.subheader("📝 Diventa un membro SWAG")
+            nuovo_nome = st.text_input("Nome")
+            nuovo_cognome = st.text_input("Cognome")
+            nuova_email = st.text_input("Email (aziendale o personale)")
+            btn_reg = st.form_submit_button("INIZIA ORA")
             
-            if utente_sel:
-                n_sel, c_sel = utente_sel.split(" ", 1)
-                
-                try:
-                    df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all")
-                    df_log = df_log.loc[:, ~df_log.columns.astype(str).str.contains('^Unnamed')]
-                    
-                    storico_utente = df_log[(df_log['Nome'] == n_sel) & (df_log['Cognome'] == c_sel)]
-                    
-                    if not storico_utente.empty:
-                        punti_numerici = pd.to_numeric(storico_utente['Punti_Assegnati'], errors='coerce').fillna(0)
-                        totale_reale = int(punti_numerici.sum())
-                    else:
-                        totale_reale = 0
-                    
-                    st.metric("Saldo Attuale", f"{totale_reale} SWAG Points")
-                    
-                    st.markdown("### 📋 Cronologia Attività")
-                    if not storico_utente.empty:
-                        st.dataframe(storico_utente[["Data", "Punti_Assegnati", "Attività"]], use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Nessuna attività registrata ancora.")
-                except Exception as e:
-                    st.metric("Saldo Attuale", "0 SWAG Points")
-                    st.info("Inizia a guadagnare i tuoi primi punti!")
-        else:
-            st.info("Nessun utente registrato.")
-    except Exception as e:
-        st.error(f"ERRORE LETTURA: {e}")
+            if btn_reg:
+                if nuovo_nome and nuovo_cognome:
+                    try:
+                        df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+                        nuovo_utente = pd.DataFrame([{
+                            "Nome": nuovo_nome, "Cognome": nuovo_cognome, 
+                            "Email": nuova_email, "Punti_Totali": 0
+                        }])
+                        updated_df = pd.concat([df, nuovo_utente], ignore_index=True)
+                        conn.update(worksheet="Anagrafica", data=updated_df)
+                        
+                        st.session_state.user_auth = {"Nome": nuovo_nome, "Cognome": nuovo_cognome}
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
+                else:
+                    st.warning("Compila i campi obbligatori!")
 
-# --- SEZIONE 3: REGOLAMENTO ---
-elif scelta == "Regolamento":
-    st.header("📜 Regolamento e Attività SWAG")
-    st.write("Scopri come guadagnare i tuoi SWAG Points. Ecco tutte le attività valide divise per categoria:")
+    with tab2:
+        with st.form("login_form"):
+            st.subheader("🔑 Bentornato")
+            login_nome = st.text_input("Inserisci il tuo Nome")
+            login_cognome = st.text_input("Inserisci il tuo Cognome")
+            btn_login = st.form_submit_button("ACCEDI AI MIEI PUNTI")
+            
+            if btn_login:
+                df = conn.read(worksheet="Anagrafica", ttl=0)
+                check = df[(df['Nome'].str.lower() == login_nome.lower()) & (df['Cognome'].str.lower() == login_cognome.lower())]
+                if not check.empty:
+                    st.session_state.user_auth = {"Nome": login_nome, "Cognome": login_cognome}
+                    st.rerun()
+                else:
+                    st.error("Profilo non trovato. Verifica i dati o iscriviti.")
+
+# --- PAGINA 2: DASHBOARD PUNTI ---
+else:
+    u = st.session_state.user_auth
+    st.title(f"Ciao, {u['Nome']}! 👋")
     
-    with st.expander("🤝 HR & Personal Development", expanded=True):
-        st.markdown("""
-        * **Peak Hero:** For those who participated in Peak ➔ **+5 Swaggies**
-        * **Prime Day Hero:** For those who participated in Prime Day ➔ **+3 Swaggies**
-        * **GB/BB Conversion:** SAs going from GB to BB ➔ **+6 Swaggies**
-        * **Active Ambassador:** Participates as an active ambassador at least once in the month ➔ **+3 Swaggies**
-        * **Night activities/Gemba Walk:** SAs who participate in the monthly walk ➔ **+3 Swaggies**
-        * **Fun Events:** Active participation in Fun Events ➔ **+3 Swaggies**
-        * **Away Team member:** Members of the Away team for the launch of a new DS ➔ **+15 Swaggies**
-        * **Voice of Associates best idea:** SA who proposed the best improvement idea via the board ➔ **+10 Swaggies**
-        """)
+    # 1. Calcolo Punti
+    try:
+        df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all")
+        storico = df_log[(df_log['Nome'].str.lower() == u['Nome'].lower()) & (df_log['Cognome'].str.lower() == u['Cognome'].lower())]
+        totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    except:
+        totale = 0
+        storico = pd.DataFrame()
 
-    with st.expander("⭐ Quality", expanded=False):
-        st.markdown("""
-        * **Gold NOV:** Monthly DS NOV result below 15 DPMO (for everyone) ➔ **+2 Swaggies**
-        * **Silver NOV:** Monthly DS NOV result below 30 DPMO (for everyone) ➔ **+1 Swaggie**
-        """)
+    st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
+    
+    # Tasti rapidi
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Aggiorna Punti"):
+            st.rerun()
+    with col2:
+        if st.button("🚪 Esci"):
+            st.session_state.user_auth = None
+            st.rerun()
 
-    with st.expander("🦺 Safety", expanded=False):
-        st.markdown("""
-        * **Kaizen Idea Implementation:** Concrete implementation of a Kaizen idea ➔ **+10 Swaggies**
-        * **Safety Hero:** The well-deserved award for the “Safety” hero of the month ➔ **+10 Swaggies**
-        """)
+    # Sezione Regolamento e Storico
+    t1, t2 = st.tabs(["📋 Storico Attività", "📜 Regolamento 2026"])
+    
+    with t1:
+        if not storico.empty:
+            st.dataframe(storico[["Data", "Punti_Assegnati", "Attività"]].sort_index(ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("Non hai ancora attività registrate. Partecipa agli eventi per guadagnare punti!")
 
-    with st.expander("🏢 Delivery Station Development", expanded=False):
-        st.markdown("""
-        * **Happy Birthday:** Best wishes from the SWAG team on your birthday ➔ **+5 Swaggies**
-        * **Delivery Station Birthday:** Everyone in DS on the anniversary of the opening ➔ **+3 Swaggies**
-        * **WW Scorecard Top 10:** For contributing to reaching a TOP 10 WW ranking ➔ **+7 Swaggies**
-        * **Buddy DS:** Helping train intended new hires launching a new site ➔ **+5 Swaggies**
-        """)
-
-    with st.expander("🌱 Sustainability", expanded=False):
-        st.markdown("""
-        * **Kaizen Sustainability Idea:** SAs who propose ideas evaluated by the OPS team ➔ **+1 Swaggie**
-        * **Kaizen Sustainability Implementation:** Concrete implementation of the idea ➔ **+3 Swaggies**
-        """)
+    with t2:
+        st.subheader("Come guadagnare SWAG Points")
         
-    st.info("💡 **Ricorda:** I punti verranno accreditati direttamente dai Manager nel tuo storico personale!")
+        cat = {
+            "🤝 HR & Sviluppo": [
+                ("Peak Hero", 5), ("Prime Day Hero", 3), ("GB/BB Conversion", 6), 
+                ("Active Ambassador", 3), ("Gemba Walk", 3), ("Away Team", 15)
+            ],
+            "🦺 Safety & Quality": [
+                ("Kaizen Idea", 10), ("Safety Hero", 10), ("Gold NOV", 2), ("Silver NOV", 1)
+            ],
+            "🌱 Sustainability": [
+                ("Sustainability Idea", 1), ("Sustainability Implementation", 3)
+            ],
+            "🎂 Special Events": [
+                ("Compleanno", 5), ("Anniversario DS", 3), ("Top 10 Scorecard", 7)
+            ]
+        }
+        
+        for c, tasks in cat.items():
+            with st.expander(c):
+                for t, p in tasks:
+                    st.write(f"**{t}** ➔ +{p} Swaggies")
+
+    st.markdown("---")
+    st.caption("Amazon SWAG Program 2026 - Riservato ai dipendenti")
