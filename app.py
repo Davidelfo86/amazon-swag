@@ -8,7 +8,6 @@ st.title("📦 Amazon SWAG Program")
 st.write("Gestione punti e iscrizioni dipendenti")
 st.markdown("---")
 
-# La connessione ora legge l'URL e le chiavi direttamente dai Secrets di Streamlit!
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 scelta = st.sidebar.radio("Scegli operazione:", ["Registrazione", "I miei Punti", "Regolamento"])
@@ -25,25 +24,28 @@ if scelta == "Registrazione":
         if submit:
             if nome and cognome:
                 try:
-                    # Leggiamo i dati attuali (non serve più l'url qui)
-                    df_anagrafica = conn.read(worksheet="Anagrafica")
+                    # 1. Leggiamo i dati aggirando la cache (ttl=0)
+                    df_anagrafica = conn.read(worksheet="Anagrafica", ttl=0)
                     
-                    # Creiamo la nuova riga
+                    # 2. IL TRUCCO: Puliamo le celle vuote che fanno arrabbiare Google!
+                    df_anagrafica = df_anagrafica.dropna(how="all")
+                    df_anagrafica = df_anagrafica.fillna("")
+                    
+                    # 3. Creiamo la nuova riga
                     nuovo_utente = pd.DataFrame([{
                         "Nome": nome, 
                         "Cognome": cognome, 
-                        "Email": email, 
+                        "Email": email if email else "", 
                         "Punti_Totali": 0
                     }])
                     
-                    # Uniamo i dati e carichiamo
+                    # 4. Uniamo e carichiamo
                     updated_df = pd.concat([df_anagrafica, nuovo_utente], ignore_index=True)
                     conn.update(worksheet="Anagrafica", data=updated_df)
                     
                     st.success(f"Benvenuto {nome}! Registrazione completata con successo.")
                     st.balloons()
                 except Exception as e:
-                    # ORA VEDREMO IL VERO ERRORE TECNICO!
                     st.error(f"ERRORE TECNICO: {e}")
             else:
                 st.warning("Nome e Cognome sono obbligatori!")
@@ -53,8 +55,12 @@ elif scelta == "I miei Punti":
     st.header("💰 Il tuo Saldo Punti")
     
     try:
-        df_totali = conn.read(worksheet="Anagrafica")
-        df_log = conn.read(worksheet="Log_Punti")
+        df_totali = conn.read(worksheet="Anagrafica", ttl=0)
+        df_log = conn.read(worksheet="Log_Punti", ttl=0)
+
+        # Pulizia base per evitare problemi di lettura
+        df_totali = df_totali.dropna(how="all")
+        df_log = df_log.dropna(how="all")
 
         if not df_totali.empty:
             lista_nomi = (df_totali['Nome'].astype(str) + " " + df_totali['Cognome'].astype(str)).tolist()
