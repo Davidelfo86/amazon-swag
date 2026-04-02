@@ -24,12 +24,15 @@ if scelta == "Registrazione":
         if submit:
             if nome and cognome:
                 try:
-                    # 1. Leggiamo i dati aggirando la cache (ttl=0)
                     df_anagrafica = conn.read(worksheet="Anagrafica", ttl=0)
                     
-                    # 2. IL TRUCCO: Puliamo le celle vuote che fanno arrabbiare Google!
+                    # 1. Pulizia righe vuote
                     df_anagrafica = df_anagrafica.dropna(how="all")
                     df_anagrafica = df_anagrafica.fillna("")
+                    
+                    # 2. SCACCIA-FANTASMI: Manteniamo solo le colonne che ci interessano davvero
+                    colonne_utili = ["Nome", "Cognome", "Email", "Punti_Totali"]
+                    df_anagrafica = df_anagrafica[[c for c in colonne_utili if c in df_anagrafica.columns]]
                     
                     # 3. Creiamo la nuova riga
                     nuovo_utente = pd.DataFrame([{
@@ -58,9 +61,12 @@ elif scelta == "I miei Punti":
         df_totali = conn.read(worksheet="Anagrafica", ttl=0)
         df_log = conn.read(worksheet="Log_Punti", ttl=0)
 
-        # Pulizia base per evitare problemi di lettura
         df_totali = df_totali.dropna(how="all")
         df_log = df_log.dropna(how="all")
+
+        # Rimuoviamo eventuali colonne fantasma anche in lettura
+        df_totali = df_totali.loc[:, ~df_totali.columns.astype(str).str.contains('^Unnamed')]
+        df_log = df_log.loc[:, ~df_log.columns.astype(str).str.contains('^Unnamed')]
 
         if not df_totali.empty:
             lista_nomi = (df_totali['Nome'].astype(str) + " " + df_totali['Cognome'].astype(str)).tolist()
@@ -72,6 +78,9 @@ elif scelta == "I miei Punti":
                 punti_row = df_totali.loc[(df_totali['Nome'] == n_sel) & (df_totali['Cognome'] == c_sel)]
                 if not punti_row.empty:
                     punti_tot = punti_row['Punti_Totali'].values[0]
+                    # Rimuoviamo i decimali (es. 0.0) se presenti
+                    punti_tot = int(punti_tot) if pd.notnull(punti_tot) and str(punti_tot).replace('.','',1).isdigit() else punti_tot
+                    
                     st.metric("Saldo Attuale", f"{punti_tot} SWAG Points")
                 
                 st.markdown("### 📋 Cronologia Attività")
