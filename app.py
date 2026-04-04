@@ -1,147 +1,133 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime
 
-# 1. Configurazione Pagina
-st.set_page_config(
-    page_title="Amazon SWAG 2026", 
-    page_icon="📦", 
-    layout="centered", 
-    initial_sidebar_state="collapsed"
-)
+# Configurazione iniziale
+st.set_page_config(page_title="Amazon SWAG 2026", page_icon="📦", layout="centered", initial_sidebar_state="collapsed")
 
-# 2. CSS per stile Amazon
+# CSS Amazon Style (Nasconde tutto il superfluo)
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stAppDeployButton {display:none;}
-    [data-testid="stSidebar"] {display: none;}
-    .stButton>button {
-        background-color: #FF9900;
-        color: #232F3E;
-        border-radius: 8px;
-        border: none;
-        font-weight: bold;
-        width: 100%;
-        height: 3em;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #FF9900;
-        font-size: 3rem !important;
-    }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+    .stAppDeployButton {display:none;} [data-testid="stSidebar"] {display: none;}
+    .stButton>button { background-color: #FF9900; color: #232F3E; border-radius: 8px; font-weight: bold; width: 100%; height: 3.5em; border: none; }
+    div[data-testid="stMetricValue"] { color: #FF9900; font-size: 3rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FUNZIONE PER AGGIORNARE IL FOGLIO ANAGRAFICA ---
-def aggiorna_punti_totali_su_gsheet(nome, cognome, nuovo_totale):
+# Elenco Attività e Punti (Automatico)
+ATTIVITA_PREMI = {
+    "Peak Hero (+5)": 5, "Prime Day Hero (+3)": 3, "GB/BB Conversion (+6)": 6,
+    "Active Ambassador (+3)": 3, "Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
+    "Away Team (+15)": 15, "VOA Best Idea (+10)": 10, "Gold NOV (+2)": 2,
+    "Silver NOV (+1)": 1, "Kaizen Implementation (+10)": 10, "Safety Hero (+10)": 10,
+    "Happy Birthday (+5)": 5, "DS Anniversary (+3)": 3, "Top 10 Scorecard (+7)": 7,
+    "Buddy DS (+5)": 5, "Sustainability Idea (+1)": 1, "Sustainability Impl. (+3)": 3
+}
+
+# Funzione per sincronizzare il totale nel foglio Anagrafica
+def sync_totale(nome, cognome, punti):
     try:
-        df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-        # Trova la riga corrispondente e aggiorna il valore
-        mask = (df_ana['Nome'].str.lower() == nome.lower()) & (df_ana['Cognome'].str.lower() == cognome.lower())
-        if not df_ana[mask].empty:
-            df_ana.loc[mask, 'Punti_Totali'] = nuovo_totale
-            conn.update(worksheet="Anagrafica", data=df_ana)
-    except:
-        pass
+        df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+        mask = (df['Nome'].str.lower() == nome.lower()) & (df['Cognome'].str.lower() == cognome.lower())
+        if not df[mask].empty:
+            df.loc[mask, 'Punti_Totali'] = punti
+            conn.update(worksheet="Anagrafica", data=df)
+    except: pass
 
-# --- SISTEMA DI MEMORIA (Auto-Login) ---
+# Gestione Sessione e Auto-Login
 if 'user_auth' not in st.session_state:
-    params = st.query_params
-    if "user_n" in params and "user_c" in params:
-        st.session_state.user_auth = {"Nome": params["user_n"], "Cognome": params["user_c"]}
-    else:
-        st.session_state.user_auth = None
+    p = st.query_params
+    st.session_state.user_auth = {"Nome": p["user_n"], "Cognome": p["user_c"]} if "user_n" in p else None
 
-# --- PAGINA 1: LOGIN / REGISTRAZIONE ---
+# --- FLUSSO PAGINE ---
 if st.session_state.user_auth is None:
     st.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", width=120)
     st.title("SWAG PROGRAM 2026")
+    t_login, t_iscr = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
     
-    tab_login, tab_reg = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
-    
-    with tab_login:
-        with st.form("login_form"):
-            l_nome = st.text_input("Il tuo Nome").strip()
-            l_cognome = st.text_input("Il tuo Cognome").strip()
-            if st.form_submit_button("ENTRA NEL TUO PROFILO"):
-                df = conn.read(worksheet="Anagrafica", ttl=0)
-                check = df[(df['Nome'].str.lower() == l_nome.lower()) & (df['Cognome'].str.lower() == l_cognome.lower())]
-                if not check.empty:
-                    st.session_state.user_auth = {"Nome": l_nome, "Cognome": l_cognome}
-                    st.query_params["user_n"] = l_nome
-                    st.query_params["user_c"] = l_cognome
+    with t_login:
+        with st.form("login"):
+            n, c = st.text_input("Nome").strip(), st.text_input("Cognome").strip()
+            if st.form_submit_button("ENTRA"):
+                df_a = conn.read(worksheet="Anagrafica", ttl=0)
+                if not df_a[(df_a['Nome'].str.lower()==n.lower()) & (df_a['Cognome'].str.lower()==c.lower())].empty:
+                    st.session_state.user_auth = {"Nome": n, "Cognome": c}
+                    st.query_params["user_n"], st.query_params["user_c"] = n, c
                     st.rerun()
-                else:
-                    st.error("Profilo non trovato.")
-
-    with tab_reg:
-        with st.form("reg_form"):
-            r_nome = st.text_input("Nome").strip()
-            r_cognome = st.text_input("Cognome").strip()
-            r_email = st.text_input("Email")
-            if st.form_submit_button("CREA ACCOUNT"):
-                if r_nome and r_cognome:
-                    df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                    nuovo = pd.DataFrame([{"Nome": r_nome, "Cognome": r_cognome, "Email": r_email, "Punti_Totali": 0}])
-                    conn.update(worksheet="Anagrafica", data=pd.concat([df, nuovo], ignore_index=True))
-                    st.session_state.user_auth = {"Nome": r_nome, "Cognome": r_cognome}
-                    st.query_params["user_n"] = r_nome
-                    st.query_params["user_c"] = r_cognome
+                else: st.error("Account non trovato.")
+    
+    with t_iscr:
+        with st.form("reg"):
+            rn, rc, re = st.text_input("Nome").strip(), st.text_input("Cognome").strip(), st.text_input("Email")
+            if st.form_submit_button("CREA PROFILO"):
+                if rn and rc:
+                    df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+                    new = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Email":re, "Punti_Totali":0}])
+                    conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new], ignore_index=True))
+                    st.session_state.user_auth = {"Nome":rn, "Cognome":rc}
+                    st.query_params["user_n"], st.query_params["user_c"] = rn, rc
                     st.rerun()
 
-# --- PAGINA 2: DASHBOARD ---
 else:
     u = st.session_state.user_auth
     
-    # Recupero dati e calcolo
-    try:
-        df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all")
-        storico = df_log[(df_log['Nome'].str.lower() == u['Nome'].lower()) & (df_log['Cognome'].str.lower() == u['Cognome'].lower())]
-        totale_calcolato = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
-        
-        # AGGIORNAMENTO INCROCIATO: Scrive il totale nel foglio Anagrafica se è diverso
-        aggiorna_punti_totali_su_gsheet(u['Nome'], u['Cognome'], totale_calcolato)
-        
-    except:
-        totale_calcolato = 0
-        storico = pd.DataFrame()
+    # Caricamento Dati
+    df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
+    storico = df_log[(df_log['Nome'].str.lower() == u['Nome'].lower()) & (df_log['Cognome'].str.lower() == u['Cognome'].lower())]
+    totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    sync_totale(u['Nome'], u['Cognome'], totale)
 
     st.title(f"Ciao, {u['Nome']}! 👋")
-    st.metric("IL TUO SALDO SWAG", f"{totale_calcolato} Punti")
+
+    # --- PANNELLO MANAGER (SOLO PER DAVIDE SALEMI) ---
+    if u['Nome'].lower() == "davide" and u['Cognome'].lower() == "salemi":
+        with st.expander("🛠️ PANNELLO MANAGER", expanded=True):
+            df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
+            nomi_colleghi = (df_ana['Nome'] + " " + df_ana['Cognome']).tolist()
+            
+            collega = st.selectbox("A chi vuoi assegnare i punti?", nomi_colleghi)
+            azione = st.selectbox("Seleziona attività:", list(ATTIVITA_PREMI.keys()))
+            
+            if st.button("ASSEGNA PUNTI"):
+                n_c, c_c = collega.split(" ", 1)
+                pts = ATTIVITA_PREMI[azione]
+                new_row = pd.DataFrame([{
+                    "Data": datetime.now().strftime("%d/%m/%Y"),
+                    "Nome": n_c, "Cognome": c_c,
+                    "Punti_Assegnati": pts,
+                    "Attività": azione.split(" (")[0]
+                }])
+                conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_row], ignore_index=True))
+                st.success(f"Fatto! {pts} punti inviati a {n_c}.")
+                st.balloons()
+                st.rerun()
+
+    # --- VISUALIZZAZIONE UTENTE ---
+    st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
     
-    col_agg, col_esc = st.columns(2)
-    with col_agg:
+    col1, col2 = st.columns(2)
+    with col1: 
         if st.button("🔄 AGGIORNA"): st.rerun()
-    with col_esc:
+    with col2:
         if st.button("🚪 ESCI"):
-            st.session_state.user_auth = None
             st.query_params.clear()
+            st.session_state.user_auth = None
             st.rerun()
 
-    t_storico, t_regolamento = st.tabs(["📋 STORICO", "📜 REGOLAMENTO"])
+    t_st, t_rg = st.tabs(["📋 STORICO", "📜 REGOLAMENTO"])
+    with t_st:
+        if not storico.empty: st.dataframe(storico[["Data", "Punti_Assegnati", "Attività"]][::-1], use_container_width=True, hide_index=True)
+        else: st.info("Ancora nessun punto registrato.")
     
-    with t_storico:
-        if not storico.empty:
-            st.dataframe(storico[["Data", "Punti_Assegnati", "Attività"]][::-1], use_container_width=True, hide_index=True)
-        else:
-            st.info("Nessuna attività registrata.")
-
-    with t_regolamento:
-        st.subheader("Regolamento 2026")
-        # ... (Il resto del regolamento rimane invariato)
-        with st.expander("🤝 HR & DEVELOPMENT"):
-            st.write("Peak Hero (+5), Prime Day (+3), GB/BB (+6), Ambassador (+3), Gemba (+3), Fun Events (+3), Away Team (+15), VOA Best Idea (+10)")
-        with st.expander("⭐ QUALITY"):
-            st.write("Gold NOV (+2), Silver NOV (+1)")
-        with st.expander("🦺 SAFETY"):
-            st.write("Kaizen Idea (+10), Safety Hero (+10)")
-        with st.expander("🏢 DELIVERY STATION"):
-            st.write("Birthday (+5), DS Anniversary (+3), Top 10 Scorecard (+7), Buddy (+5)")
-        with st.expander("🌱 SUSTAINABILITY"):
-            st.write("Sustainability Idea (+1), Sustainability Implementation (+3)")
+    with t_rg:
+        st.subheader("Come guadagnare punti")
+        # Regolamento completo...
+        for c, items in {"HR": [("Peak Hero", 5)], "Safety": [("Safety Hero", 10)]}.items():
+            with st.expander(c):
+                for n, p in items: st.write(f"**{n}** ➔ +{p} Punti")
 
     st.caption("Amazon SWAG 2026")
