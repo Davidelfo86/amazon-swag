@@ -3,13 +3,18 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Configurazione iniziale della pagina (Icona aggiornata con il tuo logo)
-st.set_page_config(page_title="Amazon SWAG 2026", page_icon="dlo8.png", layout="centered", initial_sidebar_state="collapsed")
+# 1. Configurazione iniziale della pagina (Icona aggiornata con il link diretto)
+st.set_page_config(
+    page_title="Amazon SWAG 2026", 
+    page_icon="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", 
+    layout="centered", 
+    initial_sidebar_state="collapsed"
+)
 
-# 2. CSS Amazon Style & Logo Telefono
+# 2. CSS Amazon Style & Logo Telefono (Con link diretto)
 st.markdown("""
-    <link rel="apple-touch-icon" href="dlo8.png">
-    <link rel="icon" href="dlo8.png">
+    <link rel="apple-touch-icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
+    <link rel="icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
     <style>
     #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
     .stAppDeployButton {display:none;} [data-testid="stSidebar"] {display: none;}
@@ -35,7 +40,7 @@ ATTIVITA_PREMI = {
     "Kaizen Sustainability Idea (+1)": 1, "Kaizen Sustainability Implementation (+3)": 3
 }
 
-# 4. Funzione per sincronizzare il totale nel foglio Anagrafica (Anti-Errore astype)
+# 4. Funzione per sincronizzare il totale nel foglio Anagrafica
 def sync_totale(nome, cognome, punti):
     try:
         df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
@@ -45,7 +50,7 @@ def sync_totale(nome, cognome, punti):
             conn.update(worksheet="Anagrafica", data=df)
     except: pass
 
-# 5. Gestione Sessione e Auto-Login (Memoria nel browser)
+# 5. Gestione Sessione e Auto-Login
 if 'user_auth' not in st.session_state:
     p = st.query_params
     st.session_state.user_auth = {"Nome": p["user_n"], "Cognome": p["user_c"]} if "user_n" in p else None
@@ -53,7 +58,7 @@ if 'user_auth' not in st.session_state:
 # --- PAGINA 1: LOGIN E REGISTRAZIONE ---
 if st.session_state.user_auth is None:
     # IL TUO LOGO DENTRO L'APP
-    st.image("dlo8.png", width=120)
+    st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
     st.markdown("""
     ### Benvenuto nel portale SWAG!
