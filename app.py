@@ -18,7 +18,7 @@ st.markdown("""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Elenco Attività e Punti (Automatico)
+# Elenco Attività e Punti
 ATTIVITA_PREMI = {
     "Peak Hero (+5)": 5, "Prime Day Hero (+3)": 3, "GB/BB Conversion (+6)": 6,
     "Active Ambassador (+3)": 3, "Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
@@ -28,11 +28,11 @@ ATTIVITA_PREMI = {
     "Buddy DS (+5)": 5, "Sustainability Idea (+1)": 1, "Sustainability Impl. (+3)": 3
 }
 
-# Funzione per sincronizzare il totale nel foglio Anagrafica
+# Funzione per sincronizzare il totale nel foglio Anagrafica (Corretta con astype)
 def sync_totale(nome, cognome, punti):
     try:
         df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-        mask = (df['Nome'].str.lower() == nome.lower()) & (df['Cognome'].str.lower() == cognome.lower())
+        mask = (df['Nome'].astype(str).str.lower() == str(nome).lower()) & (df['Cognome'].astype(str).str.lower() == str(cognome).lower())
         if not df[mask].empty:
             df.loc[mask, 'Punti_Totali'] = punti
             conn.update(worksheet="Anagrafica", data=df)
@@ -54,7 +54,8 @@ if st.session_state.user_auth is None:
             n, c = st.text_input("Nome").strip(), st.text_input("Cognome").strip()
             if st.form_submit_button("ENTRA"):
                 df_a = conn.read(worksheet="Anagrafica", ttl=0)
-                if not df_a[(df_a['Nome'].str.lower()==n.lower()) & (df_a['Cognome'].str.lower()==c.lower())].empty:
+                # Corretto con astype(str)
+                if not df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & (df_a['Cognome'].astype(str).str.lower() == c.lower())].empty:
                     st.session_state.user_auth = {"Nome": n, "Cognome": c}
                     st.query_params["user_n"], st.query_params["user_c"] = n, c
                     st.rerun()
@@ -75,10 +76,15 @@ if st.session_state.user_auth is None:
 else:
     u = st.session_state.user_auth
     
-    # Caricamento Dati
+    # Caricamento Dati (Corretto con astype)
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
-    storico = df_log[(df_log['Nome'].str.lower() == u['Nome'].lower()) & (df_log['Cognome'].str.lower() == u['Cognome'].lower())]
-    totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    if not df_log.empty and 'Nome' in df_log.columns and 'Cognome' in df_log.columns:
+        storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
+        totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    else:
+        storico = pd.DataFrame()
+        totale = 0
+        
     sync_totale(u['Nome'], u['Cognome'], totale)
 
     st.title(f"Ciao, {u['Nome']}! 👋")
@@ -87,7 +93,7 @@ else:
     if u['Nome'].lower() == "davide" and u['Cognome'].lower() == "salemi":
         with st.expander("🛠️ PANNELLO MANAGER", expanded=True):
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
-            nomi_colleghi = (df_ana['Nome'] + " " + df_ana['Cognome']).tolist()
+            nomi_colleghi = (df_ana['Nome'].astype(str) + " " + df_ana['Cognome'].astype(str)).tolist()
             
             collega = st.selectbox("A chi vuoi assegnare i punti?", nomi_colleghi)
             azione = st.selectbox("Seleziona attività:", list(ATTIVITA_PREMI.keys()))
@@ -125,7 +131,6 @@ else:
     
     with t_rg:
         st.subheader("Come guadagnare punti")
-        # Regolamento completo...
         for c, items in {"HR": [("Peak Hero", 5)], "Safety": [("Safety Hero", 10)]}.items():
             with st.expander(c):
                 for n, p in items: st.write(f"**{n}** ➔ +{p} Punti")
