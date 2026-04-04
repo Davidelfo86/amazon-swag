@@ -3,11 +3,13 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Configurazione iniziale della pagina
-st.set_page_config(page_title="Amazon SWAG 2026", page_icon="📦", layout="centered", initial_sidebar_state="collapsed")
+# 1. Configurazione iniziale della pagina (Icona aggiornata con il tuo logo)
+st.set_page_config(page_title="Amazon SWAG 2026", page_icon="dlo8.png", layout="centered", initial_sidebar_state="collapsed")
 
-# 2. CSS Amazon Style (Nasconde i menu e applica i colori)
+# 2. CSS Amazon Style & Logo Telefono
 st.markdown("""
+    <link rel="apple-touch-icon" href="dlo8.png">
+    <link rel="icon" href="dlo8.png">
     <style>
     #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
     .stAppDeployButton {display:none;} [data-testid="stSidebar"] {display: none;}
@@ -21,7 +23,7 @@ st.markdown("""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. Dizionario Attività (Usato dal Pannello Manager per assegnare i punti esatti)
+# 3. Dizionario Attività (Pannello Manager)
 ATTIVITA_PREMI = {
     "Peak Hero (+5)": 5, "Prime Day Hero (+3)": 3, "GB/BB Conversion (+6)": 6,
     "Active Ambassador (+3)": 3, "Night activities / Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
@@ -50,7 +52,8 @@ if 'user_auth' not in st.session_state:
 
 # --- PAGINA 1: LOGIN E REGISTRAZIONE ---
 if st.session_state.user_auth is None:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", width=120)
+    # IL TUO LOGO DENTRO L'APP
+    st.image("dlo8.png", width=120)
     st.title("SWAG PROGRAM 2026")
     st.markdown("""
     ### Benvenuto nel portale SWAG!
@@ -117,7 +120,7 @@ else:
                     "Data": datetime.now().strftime("%d/%m/%Y"),
                     "Nome": n_c, "Cognome": c_c,
                     "Punti_Assegnati": pts,
-                    "Attività": azione.split(" (")[0] # Rimuove il (+x) dal nome che va nel log
+                    "Attività": azione.split(" (")[0]
                 }])
                 conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_row], ignore_index=True))
                 st.success(f"Fatto! {pts} punti inviati a {n_c} {c_c}.")
@@ -144,7 +147,7 @@ else:
         else: 
             st.info("Non hai ancora attività registrate. Partecipa agli eventi per guadagnare punti!")
     
-    # --- IL NUOVO REGOLAMENTO COMPLETO ---
+    # --- REGOLAMENTO COMPLETO ---
     with t_rg:
         st.subheader("Come guadagnare punti")
         
