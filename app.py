@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Configurazione iniziale della pagina (Icona aggiornata con il link diretto)
+# 1. Configurazione iniziale della pagina
 st.set_page_config(
     page_title="Amazon SWAG 2026", 
     page_icon="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", 
@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. CSS Amazon Style & Logo Telefono (Con link diretto)
+# 2. CSS Amazon Style & Logo Telefono
 st.markdown("""
     <link rel="apple-touch-icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
     <link rel="icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
@@ -50,14 +50,16 @@ def sync_totale(nome, cognome, punti):
             conn.update(worksheet="Anagrafica", data=df)
     except: pass
 
-# 5. Gestione Sessione e Auto-Login
+# 5. Gestione Sessione e Auto-Login (Resa più sicura)
 if 'user_auth' not in st.session_state:
     p = st.query_params
-    st.session_state.user_auth = {"Nome": p["user_n"], "Cognome": p["user_c"]} if "user_n" in p else None
+    if "user_n" in p and "user_c" in p:
+        st.session_state.user_auth = {"Nome": p["user_n"], "Cognome": p["user_c"]}
+    else:
+        st.session_state.user_auth = None
 
 # --- PAGINA 1: LOGIN E REGISTRAZIONE ---
 if st.session_state.user_auth is None:
-    # IL TUO LOGO DENTRO L'APP
     st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
     st.markdown("""
@@ -69,26 +71,45 @@ if st.session_state.user_auth is None:
     
     with t_login:
         with st.form("login"):
-            n, c = st.text_input("Nome").strip(), st.text_input("Cognome").strip()
+            # Aggiunte le key per evitare conflitti!
+            n = st.text_input("Nome", key="log_n").strip()
+            c = st.text_input("Cognome", key="log_c").strip()
+            
             if st.form_submit_button("ENTRA NEL TUO PROFILO"):
                 df_a = conn.read(worksheet="Anagrafica", ttl=0)
                 if not df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & (df_a['Cognome'].astype(str).str.lower() == c.lower())].empty:
                     st.session_state.user_auth = {"Nome": n, "Cognome": c}
-                    st.query_params["user_n"], st.query_params["user_c"] = n, c
+                    st.query_params["user_n"] = n
+                    st.query_params["user_c"] = c
                     st.rerun()
-                else: st.error("Account non trovato. Controlla i dati o iscriviti.")
+                else: 
+                    st.error("Account non trovato. Controlla i dati o iscriviti.")
     
     with t_iscr:
         with st.form("reg"):
-            rn, rc, re = st.text_input("Nome").strip(), st.text_input("Cognome").strip(), st.text_input("Email")
+            # Aggiunte le key per evitare conflitti!
+            rn = st.text_input("Nome", key="reg_n").strip()
+            rc = st.text_input("Cognome", key="reg_c").strip()
+            re = st.text_input("Email", key="reg_e").strip()
+            
             if st.form_submit_button("CREA PROFILO"):
                 if rn and rc:
                     df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                    new = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Email":re, "Punti_Totali":0}])
-                    conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new], ignore_index=True))
-                    st.session_state.user_auth = {"Nome":rn, "Cognome":rc}
-                    st.query_params["user_n"], st.query_params["user_c"] = rn, rc
-                    st.rerun()
+                    
+                    # Controllo anti-doppione
+                    esiste = False
+                    if not df_a.empty and 'Nome' in df_a.columns and 'Cognome' in df_a.columns:
+                        esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
+                    
+                    if esiste:
+                        st.error("Attenzione: sei già registrato! Usa la scheda 🔑 ACCEDI.")
+                    else:
+                        new = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Email":re, "Punti_Totali":0}])
+                        conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new], ignore_index=True))
+                        st.session_state.user_auth = {"Nome":rn, "Cognome":rc}
+                        st.query_params["user_n"] = rn
+                        st.query_params["user_c"] = rc
+                        st.rerun()
 
 # --- PAGINA 2: DASHBOARD UTENTE & PANNELLO MANAGER ---
 else:
