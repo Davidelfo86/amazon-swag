@@ -50,7 +50,7 @@ def sync_totale(nome, cognome, punti):
             conn.update(worksheet="Anagrafica", data=df)
     except: pass
 
-# 5. Gestione Sessione e Auto-Login (Resa più sicura)
+# 5. Gestione Sessione e Auto-Login
 if 'user_auth' not in st.session_state:
     p = st.query_params
     if "user_n" in p and "user_c" in p:
@@ -71,7 +71,6 @@ if st.session_state.user_auth is None:
     
     with t_login:
         with st.form("login"):
-            # Aggiunte le key per evitare conflitti!
             n = st.text_input("Nome", key="log_n").strip()
             c = st.text_input("Cognome", key="log_c").strip()
             
@@ -87,7 +86,6 @@ if st.session_state.user_auth is None:
     
     with t_iscr:
         with st.form("reg"):
-            # Aggiunte le key per evitare conflitti!
             rn = st.text_input("Nome", key="reg_n").strip()
             rc = st.text_input("Cognome", key="reg_c").strip()
             re = st.text_input("Email", key="reg_e").strip()
@@ -95,8 +93,6 @@ if st.session_state.user_auth is None:
             if st.form_submit_button("CREA PROFILO"):
                 if rn and rc:
                     df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                    
-                    # Controllo anti-doppione
                     esiste = False
                     if not df_a.empty and 'Nome' in df_a.columns and 'Cognome' in df_a.columns:
                         esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
@@ -115,7 +111,7 @@ if st.session_state.user_auth is None:
 else:
     u = st.session_state.user_auth
     
-    # Lettura Log_Punti e Calcolo Saldo
+    # Lettura Log_Punti e Calcolo Saldo PERSONALE
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
     if not df_log.empty and 'Nome' in df_log.columns and 'Cognome' in df_log.columns:
         storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
@@ -131,8 +127,10 @@ else:
 
     # --- PANNELLO MANAGER SEGRETO (Solo per Davide Salemi) ---
     if u['Nome'].lower() == "davide" and u['Cognome'].lower() == "salemi":
-        with st.expander("🛠️ PANNELLO MANAGER (Riservato)", expanded=True):
-            st.write("Da qui puoi assegnare i punti ai dipendenti in modo ufficiale.")
+        with st.expander("🛠️ PANNELLO MANAGER (Riservato)", expanded=False):
+            
+            # PARTE 1: ASSEGNAZIONE PUNTI (Come prima)
+            st.markdown("### ➕ Assegna Punti")
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
             nomi_colleghi = (df_ana['Nome'].astype(str) + " " + df_ana['Cognome'].astype(str)).tolist()
             
@@ -153,7 +151,28 @@ else:
                 st.balloons()
                 st.rerun()
 
-    # --- INTERFACCIA STANDARD PER TUTTI ---
+            st.markdown("---")
+            
+            # PARTE 2: GESTIONE REGISTRO GLOBALE (La novità richiesta)
+            st.markdown("### 📋 Modifica Registro Punti")
+            st.caption("Modifica i dati direttamente nella tabella o seleziona una riga per eliminarla, poi clicca Salva.")
+            
+            updated_log = st.data_editor(
+                df_log, 
+                num_rows="dynamic", # Permette di eliminare righe
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Punti_Assegnati": st.column_config.NumberColumn(format="%d")
+                }
+            )
+            
+            if st.button("💾 SALVA MODIFICHE REGISTRO"):
+                conn.update(worksheet="Log_Punti", data=updated_log)
+                st.success("Database aggiornato con successo!")
+                st.rerun()
+
+    # --- INTERFACCIA STANDARD PER TUTTI (incluso il Manager) ---
     st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
     
     col1, col2 = st.columns(2)
