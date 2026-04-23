@@ -2,14 +2,38 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Amazon SWAG 2026</title>
+    
+    <link rel="apple-touch-icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Amazon SWAG">
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-        iframe { width: 100%; height: 100%; border: none; }
+        /* Rimuove margini e scroll bar per un effetto App a tutto schermo */
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100%; 
+            width: 100%;
+            overflow: hidden; 
+            background-color: #232F3E; /* Colore di sfondo Amazon durante il caricamento */
+        }
+        
+        iframe { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+        }
     </style>
 </head>
 <body>
-    <iframe src="https://tuo-nome-app.streamlit.app/?embed=true"></iframe>
+
+    <iframe 
+        src="https://amazon-swag-dk5vxwh336x2kndkom4vqe.streamlit.app/?embed=true" 
+        allow="camera;microphone;geolocation">
+    </iframe>
+
 </body>
 </html>
