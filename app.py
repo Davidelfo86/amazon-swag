@@ -62,10 +62,7 @@ if 'user_auth' not in st.session_state:
 if st.session_state.user_auth is None:
     st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
-    st.markdown("""
-    ### Benvenuto nel portale SWAG!
-    Riconosciamo il tuo impegno. Accumula punti e scopri i vantaggi riservati ai migliori.
-    """)
+    st.markdown("### Benvenuto! Accedi per gestire i tuoi punti.")
     
     t_login, t_iscr = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
     
@@ -73,163 +70,134 @@ if st.session_state.user_auth is None:
         with st.form("login"):
             n = st.text_input("Nome", key="log_n").strip()
             c = st.text_input("Cognome", key="log_c").strip()
+            p_input = st.text_input("Password", key="log_p", type="password").strip()
             
             if st.form_submit_button("ENTRA NEL TUO PROFILO"):
-                df_a = conn.read(worksheet="Anagrafica", ttl=0)
-                if not df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & (df_a['Cognome'].astype(str).str.lower() == c.lower())].empty:
-                    st.session_state.user_auth = {"Nome": n, "Cognome": c}
-                    st.query_params["user_n"] = n
-                    st.query_params["user_c"] = c
-                    st.rerun()
-                else: 
-                    st.error("Account non trovato. Controlla i dati o iscriviti.")
-    
+                df_a = conn.read(worksheet="Anagrafica", ttl=0).fillna("")
+                user_row = df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & 
+                                (df_a['Cognome'].astype(str).str.lower() == c.lower())]
+                
+                if not user_row.empty:
+                    pwd_salvata = str(user_row.iloc[0]['Password']).strip()
+                    
+                    # Gestione primo accesso o password mancante
+                    if pwd_salvata == "":
+                        if p_input == "":
+                            st.warning("Profilo senza password. Inseriscine una ora per attuarlo.")
+                        else:
+                            idx = user_row.index[0]
+                            df_a.at[idx, 'Password'] = p_input
+                            conn.update(worksheet="Anagrafica", data=df_a)
+                            st.success("Password impostata! Accesso in corso...")
+                            st.session_state.user_auth = {"Nome": n, "Cognome": c}
+                            st.query_params["user_n"], st.query_params["user_c"] = n, c
+                            st.rerun()
+                    
+                    elif p_input == pwd_salvata:
+                        st.session_state.user_auth = {"Nome": n, "Cognome": c}
+                        st.query_params["user_n"], st.query_params["user_c"] = n, c
+                        st.rerun()
+                    else:
+                        st.error("Password errata.")
+                else:
+                    st.error("Account non trovato.")
+
     with t_iscr:
         with st.form("reg"):
             rn = st.text_input("Nome", key="reg_n").strip()
             rc = st.text_input("Cognome", key="reg_c").strip()
-            re = st.text_input("Email", key="reg_e").strip()
+            rp = st.text_input("Scegli una Password", key="reg_p", type="password").strip()
             
             if st.form_submit_button("CREA PROFILO"):
-                if rn and rc:
+                if rn and rc and rp:
                     df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                    esiste = False
-                    if not df_a.empty and 'Nome' in df_a.columns and 'Cognome' in df_a.columns:
-                        esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
-                    
+                    esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & 
+                                      (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
                     if esiste:
-                        st.error("Attenzione: sei già registrato! Usa la scheda 🔑 ACCEDI.")
+                        st.error("Utente già registrato.")
                     else:
-                        new = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Email":re, "Punti_Totali":0}])
-                        conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new], ignore_index=True))
+                        new_user = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Password":rp, "Punti_Totali":0}])
+                        conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new_user], ignore_index=True))
                         st.session_state.user_auth = {"Nome":rn, "Cognome":rc}
-                        st.query_params["user_n"] = rn
-                        st.query_params["user_c"] = rc
+                        st.query_params["user_n"], st.query_params["user_c"] = rn, rc
                         st.rerun()
+                else:
+                    st.warning("Compila tutti i campi.")
 
 # --- PAGINA 2: DASHBOARD UTENTE & PANNELLO MANAGER ---
 else:
     u = st.session_state.user_auth
-    
-    # Lettura Log_Punti e Calcolo Saldo PERSONALE
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
-    if not df_log.empty and 'Nome' in df_log.columns and 'Cognome' in df_log.columns:
-        storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
+    
+    if not df_log.empty and 'Nome' in df_log.columns:
+        storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & 
+                        (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
         totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
     else:
-        storico = pd.DataFrame()
-        totale = 0
+        storico, totale = pd.DataFrame(), 0
         
-    # Allineamento con il foglio Anagrafica
     sync_totale(u['Nome'], u['Cognome'], totale)
-
     st.title(f"Ciao, {u['Nome']}! 👋")
 
-    # --- PANNELLO MANAGER SEGRETO (Solo per Davide Salemi) ---
+    # --- PANNELLO MANAGER SEGRETO ---
     if u['Nome'].lower() == "davide" and u['Cognome'].lower() == "salemi":
-        with st.expander("🛠️ PANNELLO MANAGER (Riservato)", expanded=False):
-            
-            # PARTE 1: ASSEGNAZIONE PUNTI (Come prima)
+        with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
             st.markdown("### ➕ Assegna Punti")
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
             nomi_colleghi = (df_ana['Nome'].astype(str) + " " + df_ana['Cognome'].astype(str)).tolist()
             
-            collega = st.selectbox("A chi vuoi assegnare i punti?", nomi_colleghi)
-            azione = st.selectbox("Seleziona attività ufficiale:", list(ATTIVITA_PREMI.keys()))
+            collega = st.selectbox("Seleziona dipendente:", nomi_colleghi)
+            azione = st.selectbox("Attività:", list(ATTIVITA_PREMI.keys()))
             
-            if st.button("ASSEGNA PUNTI AL DIPENDENTE"):
+            if st.button("CONFERMA ASSEGNAZIONE"):
                 n_c, c_c = collega.split(" ", 1)
                 pts = ATTIVITA_PREMI[azione]
-                new_row = pd.DataFrame([{
+                new_entry = pd.DataFrame([{
                     "Data": datetime.now().strftime("%d/%m/%Y"),
                     "Nome": n_c, "Cognome": c_c,
                     "Punti_Assegnati": pts,
                     "Attività": azione.split(" (")[0]
                 }])
-                conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_row], ignore_index=True))
-                st.success(f"Fatto! {pts} punti inviati a {n_c} {c_c}.")
-                st.balloons()
+                conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_entry], ignore_index=True))
+                st.success(f"Assegnati {pts} punti!")
                 st.rerun()
 
             st.markdown("---")
-            
-            # PARTE 2: GESTIONE REGISTRO GLOBALE (La novità richiesta)
-            st.markdown("### 📋 Modifica Registro Punti")
-            st.caption("Modifica i dati direttamente nella tabella o seleziona una riga per eliminarla, poi clicca Salva.")
-            
-            updated_log = st.data_editor(
-                df_log, 
-                num_rows="dynamic", # Permette di eliminare righe
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Punti_Assegnati": st.column_config.NumberColumn(format="%d")
-                }
-            )
-            
-            if st.button("💾 SALVA MODIFICHE REGISTRO"):
+            st.markdown("### 📋 Modifica Registro")
+            updated_log = st.data_editor(df_log, num_rows="dynamic", use_container_width=True, hide_index=True)
+            if st.button("💾 SALVA MODIFICHE"):
                 conn.update(worksheet="Log_Punti", data=updated_log)
-                st.success("Database aggiornato con successo!")
+                st.success("Registro aggiornato!")
                 st.rerun()
 
-    # --- INTERFACCIA STANDARD PER TUTTI (incluso il Manager) ---
+    # --- INTERFACCIA UTENTE ---
     st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
     
-    col1, col2 = st.columns(2)
-    with col1: 
-        if st.button("🔄 AGGIORNA SALDO"): st.rerun()
-    with col2:
+    c1, c2 = st.columns(2)
+    with c1: 
+        if st.button("🔄 AGGIORNA"): st.rerun()
+    with c2:
         if st.button("🚪 ESCI"):
             st.query_params.clear()
             st.session_state.user_auth = None
             st.rerun()
 
-    t_st, t_rg = st.tabs(["📋 STORICO ATTIVITÀ", "📜 REGOLAMENTO 2026"])
+    t_st, t_rg = st.tabs(["📋 STORICO", "📜 REGOLAMENTO"])
     
     with t_st:
         if not storico.empty: 
             st.dataframe(storico[["Data", "Punti_Assegnati", "Attività"]][::-1], use_container_width=True, hide_index=True)
         else: 
-            st.info("Non hai ancora attività registrate. Partecipa agli eventi per guadagnare punti!")
+            st.info("Nessuna attività registrata.")
     
-    # --- REGOLAMENTO COMPLETO ---
     with t_rg:
         st.subheader("Come guadagnare punti")
-        
         regole = {
-            "🤝 HR & PERSONAL DEVELOPMENT": [
-                ("Peak Hero", "Per chi ha partecipato al periodo di Peak", 5),
-                ("Prime Day Hero", "Per chi ha partecipato al Prime Day", 3),
-                ("GB/BB Conversion", "Per gli SA che passano da Green Badge a Blue Badge", 6),
-                ("Active Ambassador", "Per chi partecipa come ambassador attivo almeno una volta al mese", 3),
-                ("Night activities / Gemba Walk", "Per gli SA che partecipano alla Gemba Walk mensile o attività notturne", 3),
-                ("Fun Events", "Per tutti gli SA che partecipano attivamente agli eventi Fun", 3),
-                ("Away Team member", "Per i membri dell'Away team per il lancio di una nuova DS", 15),
-                ("Voice of Associates best idea", "Per l'SA che propone la migliore idea di miglioramento tramite bacheca VOA", 10)
-            ],
-            "⭐ QUALITY": [
-                ("Gold NOV", "Se la DS mantiene un risultato mensile NOV sotto i 15 DPMO (per tutti)", 2),
-                ("Silver NOV", "Se la DS mantiene un risultato mensile NOV sotto i 30 DPMO (per tutti)", 1)
-            ],
-            "🦺 SAFETY": [
-                ("Kaizen Idea Implementation", "Implementazione concreta di un'idea Kaizen", 10),
-                ("Safety Hero", "Premio meritato per l'eroe Safety del mese", 10)
-            ],
-            "🏢 DELIVERY STATION DEVELOPMENT": [
-                ("Happy Birthday", "Auguri dal team SWAG per il tuo compleanno", 5),
-                ("Delivery Station Birthday", "Per tutti i dipendenti nell'anniversario dell'apertura della DS", 3),
-                ("WW Scorecard Top 10", "Per aver contribuito a raggiungere la TOP 10 mondiale nella scorecard", 7),
-                ("Buddy DS", "Per i membri che aiutano a formare i neo-assunti lanciando un nuovo sito", 5)
-            ],
-            "🌱 SUSTAINABILITY": [
-                ("Kaizen Sustainability Idea", "Per proposte Kaizen sulla sostenibilità valutate dal team OPS", 1),
-                ("Kaizen Sustainability Implementation", "Implementazione concreta di un'idea Kaizen sulla sostenibilità", 3)
-            ]
+            "🤝 HR & DEVELOPMENT": [("Peak Hero", "+5"), ("Prime Day Hero", "+3"), ("Away Team", "+15")],
+            "⭐ QUALITY & SAFETY": [("Gold NOV", "+2"), ("Safety Hero", "+10"), ("Kaizen Idea", "+10")]
         }
+        for cat, voci in regole.items():
+            with st.expander(cat):
+                for t, p in voci: st.write(f"**{t}**: {p} punti")
 
-        for categoria, voci in regole.items():
-            with st.expander(categoria):
-                for titolo, desc, punti in voci:
-                    st.markdown(f"**{titolo}** ➔ **+{punti} Swaggies** \n*{desc}*")
-
-    st.caption("Amazon SWAG Program 2026 - Piattaforma Ufficiale")
+    st.caption("Amazon SWAG Program 2026")
