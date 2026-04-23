@@ -8,31 +8,18 @@
     <link rel="apple-touch-icon" href="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Amazon SWAG">
 
     <style>
-        /* Rimuove margini e scroll bar per un effetto App a tutto schermo */
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            height: 100%; 
-            width: 100%;
-            overflow: hidden; 
-            background-color: #232F3E; /* Colore di sfondo Amazon durante il caricamento */
-        }
-        
-        iframe { 
-            width: 100%; 
-            height: 100%; 
-            border: none; 
-        }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #232F3E; }
+        iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
 
     <iframe 
         src="https://amazon-swag-dk5vxwh336x2kndkom4vqe.streamlit.app/?embed=true" 
-        allow="camera;microphone;geolocation">
+        allow="camera;microphone;geolocation;clipboard-read;clipboard-write"
+        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts">
     </iframe>
 
 </body>
