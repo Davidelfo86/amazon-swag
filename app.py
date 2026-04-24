@@ -40,17 +40,7 @@ ATTIVITA_PREMI = {
     "Kaizen Sustainability Idea (+1)": 1, "Kaizen Sustainability Implementation (+3)": 3
 }
 
-# 4. Funzione per sincronizzare il totale nel foglio Anagrafica
-def sync_totale(nome, cognome, punti):
-    try:
-        df = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-        mask = (df['Nome'].astype(str).str.lower() == str(nome).lower()) & (df['Cognome'].astype(str).str.lower() == str(cognome).lower())
-        if not df[mask].empty:
-            df.loc[mask, 'Punti_Totali'] = punti
-            conn.update(worksheet="Anagrafica", data=df)
-    except: pass
-
-# 5. Gestione Sessione e Auto-Login
+# 4. Gestione Sessione e Auto-Login
 if 'user_auth' not in st.session_state:
     p = st.query_params
     if "user_n" in p and "user_c" in p:
@@ -80,7 +70,6 @@ if st.session_state.user_auth is None:
                 if not user_row.empty:
                     pwd_salvata = str(user_row.iloc[0]['Password']).strip()
                     
-                    # Gestione primo accesso o password mancante
                     if pwd_salvata == "":
                         if p_input == "":
                             st.warning("Profilo senza password. Inseriscine una ora per attuarlo.")
@@ -136,7 +125,6 @@ else:
     else:
         storico, totale = pd.DataFrame(), 0
         
-    sync_totale(u['Nome'], u['Cognome'], totale)
     st.title(f"Ciao, {u['Nome']}! 👋")
 
     # --- PANNELLO MANAGER SEGRETO ---
@@ -158,16 +146,30 @@ else:
                     "Punti_Assegnati": pts,
                     "Attività": azione.split(" (")[0]
                 }])
-                conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_entry], ignore_index=True))
+                df_updated_log = pd.concat([df_log, new_entry], ignore_index=True)
+                conn.update(worksheet="Log_Punti", data=df_updated_log)
                 st.success(f"Assegnati {pts} punti!")
                 st.rerun()
 
             st.markdown("---")
-            st.markdown("### 📋 Modifica Registro")
+            st.markdown("### 📋 Modifica/Elimina Registro")
+            st.caption("Per eliminare: seleziona la riga e premi 'Canc'.")
             updated_log = st.data_editor(df_log, num_rows="dynamic", use_container_width=True, hide_index=True)
-            if st.button("💾 SALVA MODIFICHE"):
+            
+            if st.button("💾 SALVA MODIFICHE E SINCRONIZZA"):
+                # 1. Aggiorna Log_Punti
                 conn.update(worksheet="Log_Punti", data=updated_log)
-                st.success("Registro aggiornato!")
+                
+                # 2. Ricalcola totali per Anagrafica
+                df_ana_new = conn.read(worksheet="Anagrafica", ttl=0).fillna("")
+                for index, row in df_ana_new.iterrows():
+                    mask = (updated_log['Nome'].astype(str).str.lower() == str(row['Nome']).lower()) & \
+                           (updated_log['Cognome'].astype(str).str.lower() == str(row['Cognome']).lower())
+                    punti_attuali = int(pd.to_numeric(updated_log[mask]['Punti_Assegnati'], errors='coerce').sum())
+                    df_ana_new.at[index, 'Punti_Totali'] = punti_attuali
+                
+                conn.update(worksheet="Anagrafica", data=df_ana_new)
+                st.success("Registro e totali aggiornati!")
                 st.rerun()
 
     # --- INTERFACCIA UTENTE ---
