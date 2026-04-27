@@ -127,8 +127,17 @@ else:
         
     st.title(f"Ciao, {u['Nome']}! 👋")
 
+    # --- LISTA ADMIN (Chi può vedere il pannello manager) ---
+    ADMINS = [
+        ("davide", "salemi"),
+        ("massimo", "borella"),
+        ("angelo", "nisselino")
+    ]
+    
+    is_admin = (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS
+
     # --- PANNELLO MANAGER SEGRETO ---
-    if u['Nome'].lower() == "davide" and u['Cognome'].lower() == "salemi":
+    if is_admin:
         with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
             st.markdown("### ➕ Assegna Punti")
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all")
