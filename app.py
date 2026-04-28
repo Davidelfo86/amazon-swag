@@ -19,6 +19,8 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #FF9900; font-size: 3rem !important; }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #f0f2f6; border-radius: 5px; padding: 10px; }
+    /* Stile per il Disclaimer */
+    .disclaimer { font-size: 0.8rem; color: #666; font-style: italic; border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-top: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -48,6 +50,10 @@ if 'user_auth' not in st.session_state:
 if st.session_state.user_auth is None:
     st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
+    
+    # MESSAGGIO DI AVVISO (DISCLAIMER)
+    st.info("**Nota sull'iniziativa**: Questa è un'iniziativa indipendente creata per promuovere il coinvolgimento e il divertimento all'interno della Station. Non è un tool ufficiale aziendale né un sistema di valutazione formale.")
+
     t_log, t_reg = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
     
     with t_log:
@@ -57,7 +63,10 @@ if st.session_state.user_auth is None:
             p_in = st.text_input("Password", type="password").strip()
             if st.form_submit_button("ENTRA"):
                 df_a = conn.read(worksheet="Anagrafica", ttl=0).fillna("")
-                # Controllo robusto (lowercase)
+                # FIX: Forza colonne a stringa per evitare AttributeError
+                df_a['Nome'] = df_a['Nome'].astype(str)
+                df_a['Cognome'] = df_a['Cognome'].astype(str)
+                
                 u_row = df_a[(df_a['Nome'].str.lower() == n_in.lower()) & (df_a['Cognome'].str.lower() == c_in.lower())]
                 if not u_row.empty:
                     pwd_db = str(u_row.iloc[0]['Password']).strip()
@@ -76,6 +85,9 @@ if st.session_state.user_auth is None:
             if st.form_submit_button("CREA PROFILO"):
                 if rn and rc and rp:
                     df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+                    df_a['Nome'] = df_a['Nome'].astype(str)
+                    df_a['Cognome'] = df_a['Cognome'].astype(str)
+                    
                     if not df_a[(df_a['Nome'].str.lower() == rn.lower()) & (df_a['Cognome'].str.lower() == rc.lower())].empty:
                         st.error("Utente già esistente.")
                     else:
@@ -87,22 +99,30 @@ if st.session_state.user_auth is None:
 # --- DASHBOARD UTENTE ---
 else:
     u = st.session_state.user_auth
-    # Carico i log per calcolare il totale reale
+    # Carico i log
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
-    storico = df_log[(df_log['Nome'].str.lower() == u['Nome'].lower()) & (df_log['Cognome'].str.lower() == u['Cognome'].lower())]
-    totale_attuale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    
+    # FIX: Forza colonne a stringa per il calcolo dello storico
+    if not df_log.empty:
+        df_log['Nome'] = df_log['Nome'].astype(str)
+        df_log['Cognome'] = df_log['Cognome'].astype(str)
+        storico = df_log[(df_log['Nome'].str.lower() == str(u['Nome']).lower()) & (df_log['Cognome'].str.lower() == str(u['Cognome']).lower())]
+    else:
+        storico = pd.DataFrame()
+
+    totale_attuale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum()) if not storico.empty else 0
         
     st.title(f"Ciao, {u['Nome']}! 👋")
     st.metric("IL TUO SALDO SWAG", f"{totale_attuale} Punti")
 
-    # --- PANNELLO MANAGER (ADMIN ONLY) ---
+    # --- PANNELLO MANAGER ---
     ADMINS = [("davide", "salemi"), ("massimo", "borella"), ("angelo", "nisselino")]
     if (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS:
         with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
             
             st.markdown("#### ➕ Assegna Punti")
-            lista_colleghi = (df_ana['Nome'] + " " + df_ana['Cognome']).tolist()
+            lista_colleghi = (df_ana['Nome'].astype(str) + " " + df_ana['Cognome'].astype(str)).tolist()
             collega_scelto = st.selectbox("Seleziona dipendente:", lista_colleghi)
             attivita_scelta = st.selectbox("Attività svolta:", list(ATTIVITA_PREMI.keys()))
             
@@ -110,7 +130,6 @@ else:
                 nome_c, cognome_c = collega_scelto.split(" ", 1)
                 punti_da_dare = ATTIVITA_PREMI[attivita_scelta]
                 
-                # 1. Aggiunta riga al Log
                 nuova_riga_log = pd.DataFrame([{
                     "Data": datetime.now().strftime("%d/%m/%Y"),
                     "Nome": nome_c, "Cognome": cognome_c,
@@ -121,20 +140,19 @@ else:
                 df_log_nuovo = pd.concat([df_log, nuova_riga_log], ignore_index=True)
                 conn.update(worksheet="Log_Punti", data=df_log_nuovo)
                 
-                # 2. Aggiornamento automatico Totale in Anagrafica
                 nuovo_totale = int(pd.to_numeric(df_log_nuovo[(df_log_nuovo['Nome'] == nome_c) & (df_log_nuovo['Cognome'] == cognome_c)]['Punti_Assegnati']).sum())
-                idx_ana = df_ana[(df_ana['Nome'] == nome_c) & (df_ana['Cognome'] == cognome_c)].index[0]
+                idx_ana = df_ana[(df_ana['Nome'].astype(str) == nome_c) & (df_ana['Cognome'].astype(str) == cognome_c)].index[0]
                 df_ana.at[idx_ana, 'Punti_Totali'] = nuovo_totale
                 conn.update(worksheet="Anagrafica", data=df_ana)
                 
-                st.success(f"Assegnati {punti_da_dare} punti. Anagrafica aggiornata!")
+                st.success(f"Punti registrati! Anagrafica aggiornata.")
                 st.rerun()
 
             st.markdown("---")
             st.markdown("#### 📊 Riepilogo Globale (Sola Lettura)")
-            # Tabella riassuntiva dei totali calcolati dai log
-            classifica = df_log.groupby(['Nome', 'Cognome'])['Punti_Assegnati'].sum().reset_index()
-            st.dataframe(classifica.sort_values(by='Punti_Assegnati', ascending=False), use_container_width=True, hide_index=True)
+            if not df_log.empty:
+                classifica = df_log.groupby(['Nome', 'Cognome'])['Punti_Assegnati'].sum().reset_index()
+                st.dataframe(classifica.sort_values(by='Punti_Assegnati', ascending=False), use_container_width=True, hide_index=True)
 
     # --- STORICO E REGOLAMENTO ---
     tab_storico, tab_regole = st.tabs(["📋 IL TUO STORICO", "📜 REGOLAMENTO"])
@@ -160,4 +178,6 @@ else:
         st.session_state.user_auth = None
         st.rerun()
 
+    # Disclaimer finale piccolo
+    st.markdown("""<div class="disclaimer">Questa applicazione è un progetto indipendente a scopo ludico e di engagement interno. Non è un'applicazione ufficiale Amazon.</div>""", unsafe_allow_html=True)
     st.caption("Amazon SWAG 2026 - Versione Gold 🏆")
