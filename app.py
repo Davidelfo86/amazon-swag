@@ -25,7 +25,7 @@ st.markdown("""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. Dizionario Attività (Usato dal Manager per assegnare punti)
+# 3. Dizionario Attività
 ATTIVITA_PREMI = {
     "Peak Hero (+5)": 5, "Prime Day Hero (+3)": 3, "GB/BB Conversion (+6)": 6,
     "Active Ambassador (+3)": 3, "Night activities / Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
@@ -45,23 +45,56 @@ if 'user_auth' not in st.session_state:
     else:
         st.session_state.user_auth = None
 
-# --- PAGINA LOGIN (Semplificata per il ripristino) ---
+# --- PAGINA 1: LOGIN E REGISTRAZIONE ---
 if st.session_state.user_auth is None:
     st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
-    with st.form("login"):
-        n = st.text_input("Nome").strip()
-        c = st.text_input("Cognome").strip()
-        if st.form_submit_button("ACCEDI"):
-            st.session_state.user_auth = {"Nome": n, "Cognome": c}
-            st.rerun()
+    
+    t_login, t_iscr = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
+    
+    with t_login:
+        with st.form("login"):
+            n = st.text_input("Nome").strip()
+            c = st.text_input("Cognome").strip()
+            p_input = st.text_input("Password", type="password").strip()
+            if st.form_submit_button("ENTRA NEL TUO PROFILO"):
+                df_a = conn.read(worksheet="Anagrafica", ttl=0).fillna("")
+                user_row = df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & 
+                                (df_a['Cognome'].astype(str).str.lower() == c.lower())]
+                
+                if not user_row.empty:
+                    pwd_salvata = str(user_row.iloc[0]['Password']).strip()
+                    if pwd_salvata == "" or p_input == pwd_salvata:
+                        st.session_state.user_auth = {"Nome": n, "Cognome": c}
+                        st.query_params["user_n"], st.query_params["user_c"] = n, c
+                        st.rerun()
+                    else:
+                        st.error("Password errata.")
+                else:
+                    st.error("Account non trovato.")
 
-# --- DASHBOARD UTENTE ---
+    with t_iscr:
+        with st.form("reg"):
+            rn = st.text_input("Nome (Nuovo)").strip()
+            rc = st.text_input("Cognome (Nuovo)").strip()
+            rp = st.text_input("Scegli Password", type="password").strip()
+            if st.form_submit_button("CREA PROFILO"):
+                df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+                esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & 
+                                  (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
+                if esiste:
+                    st.error("Utente già registrato.")
+                else:
+                    new_user = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Password":rp, "Punti_Totali":0}])
+                    conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new_user], ignore_index=True))
+                    st.success("Profilo creato! Ora puoi accedere.")
+
+# --- PAGINA 2: DASHBOARD E PANNELLO MANAGER ---
 else:
     u = st.session_state.user_auth
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
     
-    # Calcolo Totale
+    # Calcolo totale basato sul LOG
     storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & 
                     (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
     totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
@@ -69,59 +102,81 @@ else:
     st.title(f"Ciao, {u['Nome']}! 👋")
     st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
 
-    # --- PANNELLO MANAGER (Lista Admin) ---
+    # --- ADMIN CHECK ---
     ADMINS = [("davide", "salemi"), ("massimo", "borella"), ("angelo", "nisselino")]
-    if (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS:
-        with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
-            # (Qui va il codice del pannello manager che abbiamo sviluppato prima)
-            st.write("Funzioni di gestione attive.")
+    is_admin = (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS
 
-    # --- SEZIONE TABS: STORICO E REGOLAMENTO ---
-    t_st, t_rg = st.tabs(["📋 IL TUO STORICO", "📜 REGOLAMENTO COMPLETO"])
+    if is_admin:
+        with st.expander("🛠️ PANNELLO MANAGER & AUDIT", expanded=False):
+            df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
+            
+            # 1. Assegnazione rapida
+            collega = st.selectbox("Seleziona dipendente:", (df_ana['Nome'] + " " + df_ana['Cognome']).tolist())
+            azione = st.selectbox("Attività:", list(ATTIVITA_PREMI.keys()))
+            
+            if st.button("CONFERMA ASSEGNAZIONE"):
+                n_c, c_c = collega.split(" ", 1)
+                pts = ATTIVITA_PREMI[azione]
+                new_entry = pd.DataFrame([{
+                    "Data": datetime.now().strftime("%d/%m/%Y"),
+                    "Nome": n_c, "Cognome": c_c, "Punti_Assegnati": pts,
+                    "Attività": azione.split(" (")[0], "Assegnato_da": f"{u['Nome']} {u['Cognome']}"
+                }])
+                conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_entry], ignore_index=True))
+                st.success("Punti assegnati!")
+                st.rerun()
+
+            # 2. Modifica Anagrafica con Audit
+            st.markdown("---")
+            st.markdown("### 📋 Modifica Punti Totali (Audit)")
+            edited_ana = st.data_editor(df_ana, use_container_width=True, hide_index=True)
+            
+            if st.button("💾 SALVA E GIUSTIFICA"):
+                for i in range(len(df_ana)):
+                    old_v = pd.to_numeric(df_ana.iloc[i]['Punti_Totali'], errors='coerce') or 0
+                    new_v = pd.to_numeric(edited_ana.iloc[i]['Punti_Totali'], errors='coerce') or 0
+                    if old_v != new_v:
+                        diff = new_v - old_v
+                        motivo = st.text_input(f"Motivo per {diff} pts a {edited_ana.iloc[i]['Nome']}:", key=f"m_{i}")
+                        if motivo:
+                            rec = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y"), 
+                                "Nome": edited_ana.iloc[i]['Nome'], "Cognome": edited_ana.iloc[i]['Cognome'], 
+                                "Punti_Assegnati": diff, "Attività": f"MANUALE: {motivo}", "Assegnato_da": f"{u['Nome']} {u['Cognome']}"}])
+                            conn.update(worksheet="Log_Punti", data=pd.concat([df_log, rec], ignore_index=True))
+                            conn.update(worksheet="Anagrafica", data=edited_ana)
+                            st.rerun()
+                        else:
+                            st.warning("Inserisci il motivo!")
+                            st.stop()
+
+    # --- TABS: STORICO E REGOLAMENTO ---
+    t_st, t_rg = st.tabs(["📋 STORICO", "📜 REGOLAMENTO"])
     
     with t_st:
-        if not storico.empty: 
+        if not storico.empty:
             st.dataframe(storico[["Data", "Punti_Assegnati", "Attività", "Assegnato_da"]][::-1], use_container_width=True, hide_index=True)
-        else: 
-            st.info("Non hai ancora attività registrate. Mettiti in gioco!")
-    
+        else:
+            st.info("Ancora nessun punto registrato.")
+
     with t_rg:
-        st.subheader("🎯 Come guadagnare punti Swag")
-        st.markdown("Partecipa attivamente alla vita in Station per accumulare punti e riscattare i premi.")
-        
-        # Categorie Regolamento
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            with st.expander("🚀 EVENTI & PEAK", expanded=True):
+        st.subheader("🎯 Come guadagnare punti")
+        c1, c2 = st.columns(2)
+        with c1:
+            with st.expander("🚀 EVENTI", expanded=True):
                 st.write("**Peak Hero**: +5 pts")
-                st.write("**Prime Day Hero**: +3 pts")
-                st.write("**Away Team Member**: +15 pts")
-                st.write("**Fun Events**: +3 pts")
-
+                st.write("**Away Team**: +15 pts")
             with st.expander("💡 INNOVAZIONE"):
-                st.write("**Kaizen Idea Implementation**: +10 pts")
-                st.write("**Voice of Associates (Best Idea)**: +10 pts")
-                st.write("**Kaizen Sustainability**: +1 a +3 pts")
-
-        with col2:
-            with st.expander("🛡️ SAFETY & QUALITY", expanded=True):
+                st.write("**Kaizen Idea**: +10 pts")
+                st.write("**VOA Best Idea**: +10 pts")
+        with c2:
+            with st.expander("🛡️ SAFETY", expanded=True):
                 st.write("**Safety Hero**: +10 pts")
                 st.write("**Gold NOV**: +2 pts")
-                st.write("**Silver NOV**: +1 pts")
-                st.write("**WW Scorecard Top 10**: +7 pts")
-
-            with st.expander("🎂 SPECIAL & COMMUNITY"):
+            with st.expander("🎂 ALTRO"):
                 st.write("**Happy Birthday**: +5 pts")
-                st.write("**DS Birthday**: +3 pts")
                 st.write("**Buddy DS**: +5 pts")
-                st.write("**Active Ambassador**: +3 pts")
 
-    # Tasti di servizio
-    st.markdown("---")
     if st.button("🚪 ESCI"):
-        st.session_state.user_auth = None
         st.query_params.clear()
+        st.session_state.user_auth = None
         st.rerun()
-
-    st.caption("Amazon SWAG Program 2026 - Versione 2.1")
