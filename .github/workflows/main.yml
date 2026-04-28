@@ -1,0 +1,13 @@
+name: Sveglia Automatica App
+on:
+  schedule:
+    - cron: '*/20 * * * *' # Gira ogni 20 minuti, 24 ore su 24
+  workflow_dispatch:      # Ti permette di avviarlo a mano per test
+
+jobs:
+  ping_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cortocircuito Streamlit
+        run: |
+          curl -L -I "https://amazon-swag-dk5vxwh336x2kndkom4vqe.streamlit.app/"
