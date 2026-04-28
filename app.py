@@ -25,10 +25,10 @@ st.markdown("""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. Dizionario Attività
+# 3. Dizionario Completo Attività (Tutte le 18 voci)
 ATTIVITA_PREMI = {
     "Peak Hero (+5)": 5, "Prime Day Hero (+3)": 3, "GB/BB Conversion (+6)": 6,
-    "Active Ambassador (+3)": 3, "Night activities / Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
+    "Active Ambassador (+3)": 3, "Night activities (+3)": 3, "Gemba Walk (+3)": 3, "Fun Events (+3)": 3,
     "Away Team member (+15)": 15, "Voice of Associates best idea (+10)": 10, 
     "Gold NOV (+2)": 2, "Silver NOV (+1)": 1, 
     "Kaizen Idea Implementation (+10)": 10, "Safety Hero (+10)": 10,
@@ -95,7 +95,6 @@ else:
         with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
             
-            # ASSEGNAZIONE
             st.markdown("#### ➕ Assegna Punti")
             collega = st.selectbox("Seleziona dipendente:", (df_ana['Nome'].astype(str) + " " + df_ana['Cognome'].astype(str)).tolist())
             azione = st.selectbox("Attività:", list(ATTIVITA_PREMI.keys()))
@@ -114,20 +113,16 @@ else:
                 conn.update(worksheet="Anagrafica", data=df_ana)
                 st.success("Sincronizzato!"); st.rerun()
 
-            # RIEPILOGO GLOBALE
             st.markdown("---")
             st.markdown("#### 📊 Riepilogo Punti Dipendenti")
             if not df_log.empty:
                 classifica = df_log.groupby(['Nome', 'Cognome'])['Punti_Assegnati'].sum().reset_index()
                 st.dataframe(classifica.sort_values(by='Punti_Assegnati', ascending=False), use_container_width=True, hide_index=True)
             
-            # NUOVA SEZIONE: LOG COMPLETO
             st.markdown("---")
             st.markdown("#### 📜 Storico Globale Assegnazioni")
             if not df_log.empty:
                 st.dataframe(df_log[::-1], use_container_width=True, hide_index=True)
-            else:
-                st.info("Nessun log presente.")
 
     # --- TABS: UTENTE ---
     t_st, t_rg = st.tabs(["📋 IL TUO STORICO", "📜 REGOLAMENTO"])
@@ -136,20 +131,39 @@ else:
         else: st.info("Nessuna attività registrata.")
 
     with t_rg:
-        st.subheader("🎯 Come guadagnare punti Swag")
+        st.subheader("🎯 Guida all'assegnazione Punti Swag")
         c1, c2 = st.columns(2)
         with c1:
-            with st.expander("🚀 EVENTI & PEAK", expanded=True):
-                st.write("**Peak Hero**: +5 pts"); st.write("**Away Team**: +15 pts"); st.write("**Prime Day Hero**: +3 pts")
-            with st.expander("💡 INNOVAZIONE"):
-                st.write("**Kaizen Idea**: +10 pts"); st.write("**VOA Best Idea**: +10 pts")
+            with st.expander("🚀 PEAK & OPERATIVITÀ", expanded=True):
+                st.write("**Away Team (+15)**: Supporto presso altri siti.")
+                st.write("**WW Scorecard Top 10 (+7)**: Risultati d'eccellenza mondiali.")
+                st.write("**GB/BB Conversion (+6)**: Passaggio di ruolo o mansione.")
+                st.write("**Peak Hero (+5)**: Performance eccezionale durante il Peak.")
+                st.write("**Prime Day Hero (+3)**: Impegno durante l'evento Prime.")
+                st.write("**Night activities (+3)**: Supporto durante i turni notturni.")
+
+            with st.expander("💡 INNOVAZIONE & KAIZEN"):
+                st.write("**Kaizen Idea Implementation (+10)**: Idea realizzata con successo.")
+                st.write("**VOA Best Idea (+10)**: La miglior proposta sulla Voice of Associate.")
+                st.write("**Kaizen Sustainability Impl. (+3)**: Miglioramento green realizzato.")
+                st.write("**Kaizen Sustainability Idea (+1)**: Proposta di idea sostenibile.")
+
         with c2:
             with st.expander("🛡️ SAFETY & QUALITY", expanded=True):
-                st.write("**Safety Hero**: +10 pts"); st.write("**Gold NOV**: +2 pts"); st.write("**WW Scorecard Top 10**: +7 pts")
-            with st.expander("🎂 COMMUNITY"):
-                st.write("**Happy Birthday**: +5 pts"); st.write("**Buddy DS**: +5 pts"); st.write("**Active Ambassador**: +3 pts")
+                st.write("**Safety Hero (+10)**: Comportamento esemplare per la sicurezza.")
+                st.write("**Gemba Walk (+3)**: Partecipazione attiva ai tour di sicurezza.")
+                st.write("**Gold NOV (+2)**: Riconoscimento Gold per la qualità (Quality).")
+                st.write("**Silver NOV (+1)**: Riconoscimento Silver per la qualità (Quality).")
+
+            with st.expander("🎂 COMMUNITY & TEAM"):
+                st.write("**Happy Birthday (+5)**: Buon compleanno da parte del team!")
+                st.write("**Buddy DS (+5)**: Supporto e formazione ai nuovi assunti.")
+                st.write("**DS Birthday (+3)**: Anniversario della nostra Delivery Station.")
+                st.write("**Active Ambassador (+3)**: Promozione dei valori del team.")
+                st.write("**Fun Events (+3)**: Partecipazione attiva agli eventi social.")
 
     if st.button("🚪 ESCI"):
         st.query_params.clear(); st.session_state.user_auth = None; st.rerun()
 
     st.markdown("""<div class="disclaimer">Iniziativa indipendente a scopo ludico. Non ufficiale Amazon.</div>""", unsafe_allow_html=True)
+    st.caption("Amazon SWAG 2026 - Versione Gold 🏆")
