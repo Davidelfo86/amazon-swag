@@ -135,32 +135,31 @@ else:
         c1, c2 = st.columns(2)
         with c1:
             with st.expander("🚀 PEAK & OPERATIVITÀ", expanded=True):
-                st.write("**Away Team (+15)**: Supporto presso altri siti.")
-                st.write("**WW Scorecard Top 10 (+7)**: Risultati d'eccellenza mondiali.")
-                st.write("**GB/BB Conversion (+6)**: Passaggio di ruolo o mansione.")
-                st.write("**Peak Hero (+5)**: Performance eccezionale durante il Peak.")
-                st.write("**Prime Day Hero (+3)**: Impegno durante l'evento Prime.")
-                st.write("**Night activities (+3)**: Supporto durante i turni notturni.")
+                st.write("**Away Team (+15)**: Supporto presso altri siti di nuova apertura.")
+                st.write("**WW Scorecard Top 10 (+7)**: TOP10 al mondo.")
+                st.write("**GB/BB Conversion (+6)**: Passaggio di ruolo da GB a BB.")
+                st.write("**Peak Hero (+5)**: Partecipazione al Peak.")
+                st.write("**Prime Day Hero (+3)**: Partecipazione al Prime.")
+                st.write("**Night activities/Gemba Walk monthy (+3)**: Partecipazione mensile alle Night Activities o Gemba Walk.")
 
             with st.expander("💡 INNOVAZIONE & KAIZEN"):
                 st.write("**Kaizen Idea Implementation (+10)**: Idea realizzata con successo.")
-                st.write("**VOA Best Idea (+10)**: La miglior proposta sulla Voice of Associate.")
+                st.write("**VOA Best Idea (+10)**: La miglior proposta Voice of Associate.")
                 st.write("**Kaizen Sustainability Impl. (+3)**: Miglioramento green realizzato.")
                 st.write("**Kaizen Sustainability Idea (+1)**: Proposta di idea sostenibile.")
 
         with c2:
             with st.expander("🛡️ SAFETY & QUALITY", expanded=True):
                 st.write("**Safety Hero (+10)**: Comportamento esemplare per la sicurezza.")
-                st.write("**Gemba Walk (+3)**: Partecipazione attiva ai tour di sicurezza.")
-                st.write("**Gold NOV (+2)**: Riconoscimento Gold per la qualità (Quality).")
-                st.write("**Silver NOV (+1)**: Riconoscimento Silver per la qualità (Quality).")
+                st.write("**Gold NOV (+2)**: la Delivery Station riesce ad avere un risultato mensile di NOV inferiore a 15 DPMO.")
+                st.write("**Silver NOV (+1)**: la Delivery Station riesce ad avere un risultato mensile di NOV inferiore a 30 DPMO.")
 
             with st.expander("🎂 COMMUNITY & TEAM"):
-                st.write("**Happy Birthday (+5)**: Buon compleanno da parte del team!")
+                st.write("**Happy Birthday (+5)**: Buon compleanno da parte di tutto il team!")
                 st.write("**Buddy DS (+5)**: Supporto e formazione ai nuovi assunti.")
-                st.write("**DS Birthday (+3)**: Anniversario della nostra Delivery Station.")
-                st.write("**Active Ambassador (+3)**: Promozione dei valori del team.")
-                st.write("**Fun Events (+3)**: Partecipazione attiva agli eventi social.")
+                st.write("**DS Birthday (+3)**: Compleanno della nostra DS.")
+                st.write("**Active Ambassador (+3)**: Ambassador attivo almeno una volta nel mese.")
+                st.write("**Active partecipation in Fun Events (+3)**: Partecipazione attiva agli eventi Fun.")
 
     if st.button("🚪 ESCI"):
         st.query_params.clear(); st.session_state.user_auth = None; st.rerun()
