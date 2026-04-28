@@ -3,7 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# 1. Configurazione iniziale della pagina
+# 1. Configurazione iniziale
 st.set_page_config(
     page_title="Amazon SWAG 2026", 
     page_icon="https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", 
@@ -37,7 +37,6 @@ ATTIVITA_PREMI = {
     "Kaizen Sustainability Idea (+1)": 1, "Kaizen Sustainability Implementation (+3)": 3
 }
 
-# 4. Gestione Sessione
 if 'user_auth' not in st.session_state:
     p = st.query_params
     if "user_n" in p and "user_c" in p:
@@ -45,73 +44,63 @@ if 'user_auth' not in st.session_state:
     else:
         st.session_state.user_auth = None
 
-# --- PAGINA 1: LOGIN E REGISTRAZIONE ---
+# --- LOGIN / REGISTRAZIONE ---
 if st.session_state.user_auth is None:
     st.image("https://github.com/Davidelfo86/amazon-swag/blob/main/dlo8.png?raw=true", width=150)
     st.title("SWAG PROGRAM 2026")
-    
     t_login, t_iscr = st.tabs(["🔑 ACCEDI", "📝 ISCRIVITI"])
     
     with t_login:
         with st.form("login"):
-            n = st.text_input("Nome").strip()
-            c = st.text_input("Cognome").strip()
-            p_input = st.text_input("Password", type="password").strip()
-            if st.form_submit_button("ENTRA NEL TUO PROFILO"):
+            n_in = st.text_input("Nome").strip()
+            c_in = st.text_input("Cognome").strip()
+            p_in = st.text_input("Password", type="password").strip()
+            if st.form_submit_button("ENTRA"):
                 df_a = conn.read(worksheet="Anagrafica", ttl=0).fillna("")
-                user_row = df_a[(df_a['Nome'].astype(str).str.lower() == n.lower()) & 
-                                (df_a['Cognome'].astype(str).str.lower() == c.lower())]
-                
+                user_row = df_a[(df_a['Nome'].astype(str).str.lower() == n_in.lower()) & 
+                                (df_a['Cognome'].astype(str).str.lower() == c_in.lower())]
                 if not user_row.empty:
-                    pwd_salvata = str(user_row.iloc[0]['Password']).strip()
-                    if pwd_salvata == "" or p_input == pwd_salvata:
-                        st.session_state.user_auth = {"Nome": n, "Cognome": c}
-                        st.query_params["user_n"], st.query_params["user_c"] = n, c
+                    pwd_db = str(user_row.iloc[0]['Password']).strip()
+                    if pwd_db == "" or p_in == pwd_db:
+                        st.session_state.user_auth = {"Nome": n_in, "Cognome": c_in}
+                        st.query_params["user_n"], st.query_params["user_c"] = n_in, c_in
                         st.rerun()
-                    else:
-                        st.error("Password errata.")
-                else:
-                    st.error("Account non trovato.")
+                    else: st.error("Password errata.")
+                else: st.error("Account non trovato.")
 
     with t_iscr:
         with st.form("reg"):
-            rn = st.text_input("Nome (Nuovo)").strip()
-            rc = st.text_input("Cognome (Nuovo)").strip()
-            rp = st.text_input("Scegli Password", type="password").strip()
+            rn = st.text_input("Nome").strip(); rc = st.text_input("Cognome").strip(); rp = st.text_input("Password", type="password").strip()
             if st.form_submit_button("CREA PROFILO"):
                 df_a = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
-                esiste = not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & 
-                                  (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty
-                if esiste:
-                    st.error("Utente già registrato.")
-                else:
+                if not df_a[(df_a['Nome'].astype(str).str.lower() == rn.lower()) & (df_a['Cognome'].astype(str).str.lower() == rc.lower())].empty:
+                    st.error("Già registrato.")
+                elif rn and rc and rp:
                     new_user = pd.DataFrame([{"Nome":rn, "Cognome":rc, "Password":rp, "Punti_Totali":0}])
                     conn.update(worksheet="Anagrafica", data=pd.concat([df_a, new_user], ignore_index=True))
-                    st.success("Profilo creato! Ora puoi accedere.")
+                    st.success("Creato! Accedi ora.")
 
-# --- PAGINA 2: DASHBOARD E PANNELLO MANAGER ---
+# --- DASHBOARD ---
 else:
     u = st.session_state.user_auth
     df_log = conn.read(worksheet="Log_Punti", ttl=0).dropna(how="all").fillna("")
     
-    # Calcolo totale basato sul LOG
     storico = df_log[(df_log['Nome'].astype(str).str.lower() == u['Nome'].lower()) & 
                     (df_log['Cognome'].astype(str).str.lower() == u['Cognome'].lower())]
-    totale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
+    totale_reale = int(pd.to_numeric(storico['Punti_Assegnati'], errors='coerce').sum())
         
     st.title(f"Ciao, {u['Nome']}! 👋")
-    st.metric("IL TUO SALDO SWAG", f"{totale} Punti")
+    st.metric("IL TUO SALDO SWAG", f"{totale_reale} Punti")
 
-    # --- ADMIN CHECK ---
+    # --- PANNELLO MANAGER ---
     ADMINS = [("davide", "salemi"), ("massimo", "borella"), ("angelo", "nisselino")]
-    is_admin = (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS
-
-    if is_admin:
-        with st.expander("🛠️ PANNELLO MANAGER & AUDIT", expanded=False):
+    if (u['Nome'].lower(), u['Cognome'].lower()) in ADMINS:
+        with st.expander("🛠️ PANNELLO MANAGER", expanded=False):
             df_ana = conn.read(worksheet="Anagrafica", ttl=0).dropna(how="all").fillna("")
             
-            # 1. Assegnazione rapida
-            collega = st.selectbox("Seleziona dipendente:", (df_ana['Nome'] + " " + df_ana['Cognome']).tolist())
+            st.markdown("#### ➕ Assegna Punti")
+            nomi_c = (df_ana['Nome'] + " " + df_ana['Cognome']).tolist()
+            collega = st.selectbox("Seleziona dipendente:", nomi_c)
             azione = st.selectbox("Attività:", list(ATTIVITA_PREMI.keys()))
             
             if st.button("CONFERMA ASSEGNAZIONE"):
@@ -120,63 +109,36 @@ else:
                 new_entry = pd.DataFrame([{
                     "Data": datetime.now().strftime("%d/%m/%Y"),
                     "Nome": n_c, "Cognome": c_c, "Punti_Assegnati": pts,
-                    "Attività": azione.split(" (")[0], "Assegnato_da": f"{u['Nome']} {u['Cognome']}"
+                    "Attività": azione.split(" (")[0], 
+                    "Assegnato_da": f"{u['Nome']} {u['Cognome']}"
                 }])
                 conn.update(worksheet="Log_Punti", data=pd.concat([df_log, new_entry], ignore_index=True))
                 st.success("Punti assegnati!")
                 st.rerun()
 
-            # 2. Modifica Anagrafica con Audit
             st.markdown("---")
-            st.markdown("### 📋 Modifica Punti Totali (Audit)")
-            edited_ana = st.data_editor(df_ana, use_container_width=True, hide_index=True)
-            
-            if st.button("💾 SALVA E GIUSTIFICA"):
-                for i in range(len(df_ana)):
-                    old_v = pd.to_numeric(df_ana.iloc[i]['Punti_Totali'], errors='coerce') or 0
-                    new_v = pd.to_numeric(edited_ana.iloc[i]['Punti_Totali'], errors='coerce') or 0
-                    if old_v != new_v:
-                        diff = new_v - old_v
-                        motivo = st.text_input(f"Motivo per {diff} pts a {edited_ana.iloc[i]['Nome']}:", key=f"m_{i}")
-                        if motivo:
-                            rec = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y"), 
-                                "Nome": edited_ana.iloc[i]['Nome'], "Cognome": edited_ana.iloc[i]['Cognome'], 
-                                "Punti_Assegnati": diff, "Attività": f"MANUALE: {motivo}", "Assegnato_da": f"{u['Nome']} {u['Cognome']}"}])
-                            conn.update(worksheet="Log_Punti", data=pd.concat([df_log, rec], ignore_index=True))
-                            conn.update(worksheet="Anagrafica", data=edited_ana)
-                            st.rerun()
-                        else:
-                            st.warning("Inserisci il motivo!")
-                            st.stop()
+            st.markdown("#### 📊 Riepilogo Punti Dipendenti")
+            # Qui mostriamo la tabella di sola lettura con i totali
+            # Calcoliamo i totali aggiornati in tempo reale per la tabella
+            df_totali = df_log.groupby(['Nome', 'Cognome'])['Punti_Assegnati'].sum().reset_index()
+            st.dataframe(df_totali.sort_values(by='Punti_Assegnati', ascending=False), use_container_width=True, hide_index=True)
 
-    # --- TABS: STORICO E REGOLAMENTO ---
+    # --- TABS UTENTE ---
     t_st, t_rg = st.tabs(["📋 STORICO", "📜 REGOLAMENTO"])
-    
     with t_st:
         if not storico.empty:
             st.dataframe(storico[["Data", "Punti_Assegnati", "Attività", "Assegnato_da"]][::-1], use_container_width=True, hide_index=True)
-        else:
-            st.info("Ancora nessun punto registrato.")
+        else: st.info("Nessuna attività.")
 
     with t_rg:
         st.subheader("🎯 Come guadagnare punti")
         c1, c2 = st.columns(2)
         with c1:
             with st.expander("🚀 EVENTI", expanded=True):
-                st.write("**Peak Hero**: +5 pts")
-                st.write("**Away Team**: +15 pts")
-            with st.expander("💡 INNOVAZIONE"):
-                st.write("**Kaizen Idea**: +10 pts")
-                st.write("**VOA Best Idea**: +10 pts")
+                st.write("**Peak Hero**: +5 pts"); st.write("**Away Team**: +15 pts")
         with c2:
             with st.expander("🛡️ SAFETY", expanded=True):
-                st.write("**Safety Hero**: +10 pts")
-                st.write("**Gold NOV**: +2 pts")
-            with st.expander("🎂 ALTRO"):
-                st.write("**Happy Birthday**: +5 pts")
-                st.write("**Buddy DS**: +5 pts")
+                st.write("**Safety Hero**: +10 pts"); st.write("**Gold NOV**: +2 pts")
 
     if st.button("🚪 ESCI"):
-        st.query_params.clear()
-        st.session_state.user_auth = None
-        st.rerun()
+        st.query_params.clear(); st.session_state.user_auth = None; st.rerun()
